@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(timeout *)",
+      "Bash(curl *)",
+      "Bash(python *)",
+      "Bash(ipconfig)",
+      "Bash(findstr *)",
+      "Bash(node *)",
+      "Bash(dir *)",
+      "Bash(echo)"
+    ]
+  },
+  "$version": 4
+}

@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+/* ─── Dark mode: class-based ─────────────────────────────────── */
+@variant dark (&:where(.dark, .dark *));
+
+/* ─── CSS Custom Properties untuk dark mode ──────────────────── */
+:root {
+  --bg-primary:   #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary:  #f1f5f9;
+  --border-color: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted:   #94a3b8;
+  --shadow-color: rgba(0,0,0,0.08);
+}
+
+.dark {
+  --bg-primary:   #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary:  #1e293b;
+  --border-color: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:   #64748b;
+  --shadow-color: rgba(0,0,0,0.4);
+  color-scheme: dark;
+}
+
+/* ─── Transisi mode ──────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+/* Batalkan transisi untuk elemen animasi */
+.animate-spin,
+.animate-pulse,
+.animate-bounce,
+[class*="animate-"] {
+  transition: none !important;
+}
+
+/* ─── ANIMATIONS ─────────────────────────────────────────────── */
+@keyframes slideInRight {
+  from { transform: translateX(40px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes popIn {
+  from { transform: scale(0.92); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+@keyframes shimmer {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0  0px rgba(15,118,110,0.4); }
+  70%  { box-shadow: 0 0 0 10px rgba(15,118,110,0);   }
+  100% { box-shadow: 0 0 0  0px rgba(15,118,110,0);   }
+}
+
+@keyframes shake {
+  0%,100% { transform: translateX(0);  }
+  15%      { transform: translateX(-8px); }
+  30%      { transform: translateX( 8px); }
+  45%      { transform: translateX(-6px); }
+  60%      { transform: translateX( 6px); }
+  75%      { transform: translateX(-4px); }
+  90%      { transform: translateX( 4px); }
+}
+
+.animate-in        { animation: fadeIn     0.25s ease-out; }
+.animate-slide-up  { animation: slideInUp  0.3s  ease-out; }
+.animate-pop       { animation: popIn      0.2s  ease-out; }
+.animate-shake     { animation: shake      0.5s  ease-out; }
+.pulse-ring        { animation: pulseRing  2s    infinite; }
+
+/* ─── SCROLLBAR ───────────────────────────────────────────────── */
+::-webkit-scrollbar               { width: 8px; height: 8px; }
+::-webkit-scrollbar-track         { background: var(--bg-tertiary); }
+::-webkit-scrollbar-thumb         { background: var(--border-color); border-radius: 8px; border: 2px solid var(--bg-tertiary); }
+::-webkit-scrollbar-thumb:hover   { background: var(--text-muted); }
+
+/* Sidebar custom scrollbar — tipis dan transparan */
+aside ::-webkit-scrollbar         { width: 4px; }
+aside ::-webkit-scrollbar-track   { background: transparent; }
+aside ::-webkit-scrollbar-thumb   { background: rgba(255,255,255,0.15); border-radius: 4px; }
+aside ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+html { scroll-behavior: smooth; }
+
+/* ─── PRINT ───────────────────────────────────────────────────── */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print\:hidden { display: none !important; }
+  aside, header, footer { display: none !important; }
+  main { overflow: visible !important; }
+  .shadow-lg, .shadow-xl, .shadow-2xl, .shadow-sm, .shadow-md { box-shadow: none !important; }
+  table { page-break-inside: auto; }
+  tr    { page-break-inside: avoid; page-break-after: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+}
+
+/* ─── FOCUS & SELECTION ──────────────────────────────────────── */
+input:focus, select:focus, textarea:focus, button:focus { outline: none; }
+:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; border-radius: 4px; }
+::selection    { background: #0f766e; color: white; }
+
+/* ─── MISC ────────────────────────────────────────────────────── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { opacity: 0.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:        0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:       0.01ms !important;
+  }
+}
+
+/* ─── DARK MODE: komponen global ────────────────────────────────
+   Kelas di bawah menimpa komponen yang tidak mudah disentuh
+   dengan dark: prefix (recharts tooltip, dsb)               */
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: #334155 !important;
+}
+.dark .recharts-text { fill: #94a3b8 !important; }
+
+/* Input autofill dark fix */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+  -webkit-text-fill-color: #f1f5f9 !important;
+  caret-color: #f1f5f9;
+}

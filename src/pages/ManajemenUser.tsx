@@ -134,7 +134,7 @@ export default function ManajemenUser() {
     if (editId) {
       setUsers((prev) => prev.map((u) => u.id === editId ? { ...u, ...data } : u));
       try {
-        await dataService.saveUser({ id: editId, nama: data.nama, username: data.username, email: data.email, noHp: data.noHp, roleId: data.roleId, unitId: data.unitId, jabatan: data.jabatan, status: data.status });
+        await dataService.saveUser({ id: editId, nama: data.nama, username: data.username, email: data.email, noHp: data.noHp, roleId: data.roleId, unitId: data.unit, jabatan: data.jabatan, status: data.status });
         showToast('success', 'User diperbarui', data.nama);
       } catch (e) {
         showToast('warning', 'Updated locally only', 'Failed to sync to database');
@@ -152,7 +152,7 @@ export default function ManajemenUser() {
       };
       setUsers((prev) => [newUser, ...prev]);
       try {
-        await dataService.saveUser({ nama: data.nama, username: data.username, email: data.email, noHp: data.noHp, roleId: data.roleId, unitId: data.unitId, jabatan: data.jabatan, status: data.status });
+        await dataService.saveUser({ nama: data.nama, username: data.username, email: data.email, noHp: data.noHp, roleId: data.roleId, unitId: data.unit, jabatan: data.jabatan, status: data.status });
         showToast('success', 'User baru dibuat', `${data.nama} (${data.username})`);
       } catch (e) {
         showToast('warning', 'Created locally only', 'Failed to sync to database');

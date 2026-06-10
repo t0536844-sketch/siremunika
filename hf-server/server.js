@@ -277,6 +277,31 @@ app.delete('/api/indexing/:id', async (req, res) => {
 });
 
 // ── Import data (upsert all tables) ────────────────────────────
+// ── Valid column sets per Supabase table ─────────────────────
+// PostgREST rejects unknown columns — strip fields not in the table schema
+const TABLE_COLUMNS = {
+  pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
+  jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
+  indexing:    ['id','kodeindex','namaindex','deskripsi','bobot','aktif'],
+  hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','status'],
+  approval:    ['id','referensi','tipe','pengaju','status','catatan','timestamp','tanggalpengajuan'],
+  nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
+  pembayaran:  ['id','periode','nakesid','nakesnama','unit','jabatan','jasamedis','jasaparamedis','jasapenunjang','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','norekening','tanggalpembayaran','tanggalpersetujuan','tanggalfinalisasi','nobukti'],
+  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
+  mst_role:    ['id','namarole','deskripsi'],
+};
+
+function stripUnknownCols(rows, allowedCols) {
+  const allowed = new Set(allowedCols);
+  return rows.map(row => {
+    const out = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (allowed.has(k)) out[k] = v;
+    }
+    return out;
+  });
+}
+
 app.post('/api/import', async (req, res) => {
   try {
     const { mode = 'merge', data } = req.body;
@@ -294,22 +319,31 @@ app.post('/api/import', async (req, res) => {
       mstRole: 'mst_role',
     };
 
-    const results = {};
+    const imported = [];
+    const errors = [];
     for (const [key, table] of Object.entries(tableMap)) {
       const rows = data[key];
       if (!rows || !Array.isArray(rows) || rows.length === 0) continue;
-      // Transform camelCase keys to lowercase for Supabase
-      const payload = transformData(rows, 'toLower');
-      if (mode === 'merge') {
-        results[key] = await sbUpsert(table, payload);
-      } else {
-        // Full replace: delete all then insert
-        await sbFetch(table, 'DELETE', null, '');
-        results[key] = await sbInsert(table, payload);
+      try {
+        // 1) camelCase → lowercase keys
+        let payload = transformData(rows, 'toLower');
+        // 2) Strip columns unknown to Supabase
+        payload = stripUnknownCols(payload, TABLE_COLUMNS[table] || []);
+        // 3) Upsert or replace
+        let result;
+        if (mode === 'merge') {
+          result = await sbUpsert(table, payload);
+        } else {
+          await sbFetch(table, 'DELETE', null, '');
+          result = await sbInsert(table, payload);
+        }
+        imported.push(`${key}: ${result?.length || 0} rows`);
+      } catch (e) {
+        errors.push(`${key}: ${e.message}`);
       }
     }
 
-    res.json({ ok: true, imported: Object.keys(results).map(k => `${k}: ${results[k]?.length || 0} rows`) });
+    res.json({ ok: true, imported, errors: errors.length ? errors : undefined });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

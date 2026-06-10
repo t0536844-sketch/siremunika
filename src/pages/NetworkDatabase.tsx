@@ -38,7 +38,11 @@ export default function NetworkDatabase() {
   const [activeTab, setActiveTab] = useState<'connect' | 'sync' | 'backup' | 'log'>('connect');
   
   // State untuk connection
-  const [apiUrl, setApiUrl] = useState(`http://${window.location.hostname}:3100`);
+  const [apiUrl, setApiUrl] = useState(
+    window.location.port === '5173' || window.location.port === '5174'
+      ? `http://${window.location.hostname}:3100`
+      : ''  // Same server on HF Spaces
+  );
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [healthInfo, setHealthInfo] = useState<HealthCheckResult | null>(null);

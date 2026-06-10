@@ -1,7 +1,11 @@
 import { Pendapatan, JasaMedis, Indexing, HasilKalkulasi, ApprovalItem, Nakes, ActivityLog, Pembayaran } from './mockData';
 
-// API Configuration — dynamically uses current hostname so network clients can reach the API
-const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') || `http://${window.location.hostname}:3100`;
+// API Configuration — uses relative URL when frontend and API are on the same server (HF Spaces),
+// or absolute URL with port 3100 for local development (separate Express API bridge)
+const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') || 
+  (window.location.port === '5173' || window.location.port === '5174' 
+    ? `http://${window.location.hostname}:3100`  // Local dev: separate API server
+    : '');  // HF Spaces or production: same server, relative URLs
 
 // Generic API fetch function with error handling
 async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {

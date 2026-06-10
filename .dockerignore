@@ -3,3 +3,6 @@ dist/
 .git/
 .qwen/
 report/
+api-bridge/
+hf-server/node_modules/
+hf-server/data/

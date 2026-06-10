@@ -146,9 +146,58 @@ When adding a new page that needs database persistence:
 
 ---
 
+## CORS configuration for network access
+
+The `cors` middleware **does NOT handle comma-separated string origins correctly**. If you pass `origin: 'http://localhost:5173,http://192.168.0.233:5173'` as a string, it sends ALL origins as a single `Access-Control-Allow-Origin` header value — browsers reject this because the header must contain exactly one origin or `*`.
+
+**Fix: Use a custom origin function:**
+
+```javascript
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);  // Allow server-to-server requests
+    const allowed = (process.env.CORS_ORIGIN || '*').split(',');
+    if (allowed.includes(origin) || allowed.includes('*')) return callback(null, true);
+    callback(null, true);  // Or restrict: callback(new Error('Not allowed'))
+  },
+  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+}));
+```
+
+**Why:** The `cors` package's `origin` option expects an array, a boolean, a function, or a single string — NOT a comma-separated string. When it receives a multi-origin string, it concatenates them into one header value which browsers reject per the CORS spec.
+
+## Network access configuration
+
+To make the app accessible from other devices on the network (not just localhost):
+
+### Server binding
+- **API bridge**: `app.listen(PORT, '0.0.0.0', ...)` — listen on all interfaces, not just localhost.
+- **Vite dev server**: `server: { host: '0.0.0.0', port: 5173 }` in `vite.config.ts`.
+
+### Dynamic API URL routing
+The frontend must determine whether it's running locally (separate API server on port 3100) or on a cloud platform (API served from the same origin). Use `window.location.port` to detect the environment:
+
+```typescript
+const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') || 
+  (window.location.port === '5173' || window.location.port === '5174' 
+    ? `http://${window.location.hostname}:3100`  // Local dev: separate API server
+    : '');  // Cloud/production: same server, relative URLs
+```
+
+**Why:** On localhost, the frontend runs on port 5173/5174 and the API runs on port 3100 — absolute URL needed. On HuggingFace Spaces (or any production deployment where Express serves both API and frontend from the same port), relative URLs work because the API shares the same origin. Using `window.location.hostname` instead of `'localhost'` ensures the URL resolves correctly from any device on the network.
+
+### CORS_ORIGIN in .env
+Include all network IPs that clients might use to access the frontend:
+```
+CORS_ORIGIN=http://localhost:5173,http://192.168.0.233:5173,http://192.168.1.250:5173
+```
+
 ## Common pitfalls
 
 - **`ERR_FAILED` with 200 status**: Usually means the API bridge server is not running. Always start `node server.js` in the `api-bridge/` directory before testing.
+- **CORS rejects with comma-separated origin string**: See "CORS configuration" section above — use a custom origin function, not a plain string.
+- **API unreachable from network devices**: Ensure server listens on `0.0.0.0` (not default localhost-only) and CORS includes the device's access URL.
+- **`window.location.hostname` vs `'localhost'`**: When accessed from a network device, `window.location.hostname` returns the server's IP (e.g. `192.168.0.233`), not `localhost`. Always use the dynamic hostname.
 - **FK name resolution failures**: If the frontend sends `"Poli Umum"` as `unit` but that name doesn't exist in `ref_unit`, the server returns 400 with `Cannot resolve unit='...'`. Make sure reference data is seeded.
 - **`SCOPE_IDENTITY()` for auto‑increment**: New nakes/user records use `INSERT …; SELECT SCOPE_IDENTITY() AS newId` — the response includes the generated ID for the frontend to track.
 - **Frontend field names are camelCase**: The server endpoints accept camelCase (`jenisPelayanan`, `nilaiPendapatan`, `statusAktif`) and internally resolve to snake_case columns (`jenis_pelayanan_id`, `nilai_pendapatan`, `status_aktif`). This mirrors the view‑based export asymmetry documented in the architecture memory.

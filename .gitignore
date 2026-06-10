@@ -19,6 +19,10 @@ api key.txt
 .env.*.local
 # API bridge (runs locally, not deployed to cloud)
 api-bridge/
+# HF server node_modules (rebuilt in Docker)
+hf-server/node_modules/
+hf-server/data/
 # Qwen Code working files
-.qwen/# Reports (generated locally) 
-report/ 
+.qwen/
+# Reports (generated locally)
+report/

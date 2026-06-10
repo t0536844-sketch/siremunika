@@ -276,6 +276,43 @@ app.delete('/api/indexing/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ── Import data (upsert all tables) ────────────────────────────
+app.post('/api/import', async (req, res) => {
+  try {
+    const { mode = 'merge', data } = req.body;
+    if (!data) return res.status(400).json({ ok: false, error: 'data required' });
+
+    const tableMap = {
+      pendapatan: 'pendapatan',
+      jasaMedis: 'jasa_medis',
+      refIndexing: 'indexing',
+      hasilKalkulasi: 'hasil_kalkulasi',
+      approval: 'approval',
+      nakes: 'nakes',
+      pembayaran: 'pembayaran',
+      mstUser: 'mst_user',
+      mstRole: 'mst_role',
+    };
+
+    const results = {};
+    for (const [key, table] of Object.entries(tableMap)) {
+      const rows = data[key];
+      if (!rows || !Array.isArray(rows) || rows.length === 0) continue;
+      // Transform camelCase keys to lowercase for Supabase
+      const payload = transformData(rows, 'toLower');
+      if (mode === 'merge') {
+        results[key] = await sbUpsert(table, payload);
+      } else {
+        // Full replace: delete all then insert
+        await sbFetch(table, 'DELETE', null, '');
+        results[key] = await sbInsert(table, payload);
+      }
+    }
+
+    res.json({ ok: true, imported: Object.keys(results).map(k => `${k}: ${results[k]?.length || 0} rows`) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── CRUD: Approval ──────────────────────────────────────────────
 app.post('/api/approval', async (req, res) => {
   try {

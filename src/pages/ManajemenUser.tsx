@@ -28,13 +28,57 @@ const statusConfig: Record<UserStatus, { label: string; cls: string; icon: any }
 };
 
 export default function ManajemenUser() {
+  const { showToast } = useApp();
   // ── Data state ────────────────────────────────────────────────
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   useEffect(() => {
     dataService.exportAllData().then((data) => {
-      if (data.mstUser && data.mstUser.length > 0) setUsers(data.mstUser);
-      if (data.mstRole && data.mstRole.length > 0) setRoles(data.mstRole);
+      if (data.mstUser && data.mstUser.length > 0) {
+        // Merge Supabase data with default UserAccount fields (Supabase only stores subset)
+        const merged = data.mstUser.map((u: any) => {
+          const defaults = defaultUsers.find(d => d.id === u.id || d.username === u.username);
+          return {
+            id: u.id || 'USR-000',
+            nama: u.nama || '',
+            username: u.username || '',
+            email: u.email || '',
+            noHp: u.noHp || '',
+            roleId: (u.roleId || 'viewer') as RoleId,
+            unit: u.unit || u.unitId || '',
+            jabatan: u.jabatan || '',
+            avatar: u.avatar || u.nama?.substring(0, 2).toUpperCase() || '??',
+            status: (u.status || 'aktif') as UserStatus,
+            lastLogin: u.lastLogin || defaults?.lastLogin || '-',
+            createdAt: u.createdAt || defaults?.createdAt || new Date().toISOString().slice(0, 10),
+            createdBy: u.createdBy || defaults?.createdBy || 'System',
+            twoFactorEnabled: u.twoFactorEnabled ?? defaults?.twoFactorEnabled ?? false,
+            loginCount: u.loginCount ?? defaults?.loginCount ?? 0,
+            passwordChangedAt: u.passwordChangedAt || defaults?.passwordChangedAt || new Date().toISOString().slice(0, 10),
+            isOnline: u.isOnline ?? defaults?.isOnline ?? false,
+          } as UserAccount;
+        });
+        setUsers(merged);
+      }
+      if (data.mstRole && data.mstRole.length > 0) {
+        const mergedRoles = data.mstRole.map((r: any) => {
+          const defaults = defaultRoles.find(d => d.id === r.id);
+          return {
+            id: (r.id || 'role_unknown') as RoleId,
+            nama: r.nama || r.namaRole || '',
+            deskripsi: r.deskripsi || defaults?.deskripsi || '',
+            warna: r.warna || defaults?.warna || 'slate',
+            warnaText: r.warnaText || defaults?.warnaText || 'text-slate-600',
+            warnaBg: r.warnaBg || defaults?.warnaBg || 'bg-slate-100',
+            warnaBorder: r.warnaBorder || defaults?.warnaBorder || 'border-slate-200',
+            permissions: r.permissions || defaults?.permissions || [],
+            isSystem: r.isSystem ?? defaults?.isSystem ?? false,
+            createdAt: r.createdAt || defaults?.createdAt || new Date().toISOString().slice(0, 10),
+            userCount: r.userCount ?? defaults?.userCount ?? 0,
+          } as Role;
+        });
+        setRoles(mergedRoles);
+      }
     }).catch(() => { setUsers(defaultUsers); setRoles(defaultRoles); });
   }, []);
 

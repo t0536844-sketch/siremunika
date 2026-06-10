@@ -96,8 +96,16 @@ export default function NetworkDatabase() {
   const loadDatabaseStats = async () => {
     try {
       const response = await fetch(`${apiUrl}/stats`);
-      const data: DatabaseStats = await response.json();
-      setDbStats(data);
+      const result = await response.json();
+      if (result.ok && result.data) {
+        // HF server returns { ok, data: { totalPendapatan, ... } } — adapt to DatabaseStats
+        const statsData = result.data;
+        const tables: Record<string, string> = {};
+        for (const [key, val] of Object.entries(statsData)) {
+          if (typeof val === 'number') tables[key] = String(val);
+        }
+        setDbStats({ tables, views: [] });
+      }
     } catch (error) {
       console.error('Failed to load stats:', error);
     }
@@ -284,7 +292,7 @@ export default function NetworkDatabase() {
           {healthInfo.ok ? (
             <div className="text-green-700">
               <p><strong>Database:</strong> {healthInfo.database}</p>
-              <p><strong>Server:</strong> SQL Server 2019</p>
+              <p><strong>Server:</strong> {healthInfo.database || 'Supabase PostgreSQL via Express'}</p>
               <p className="text-xs mt-1 text-gray-500">API Bridge berjalan normal</p>
             </div>
           ) : (
@@ -300,9 +308,9 @@ export default function NetworkDatabase() {
         <div className="mt-4 p-3 bg-blue-50 rounded-md">
           <h4 className="font-semibold text-sm mb-2">Statistik Database</h4>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>Tabel: {Object.keys(dbStats.tables).length}</div>
-            <div>Views: {dbStats.views.length}</div>
-            <div>Total data: {Object.values(dbStats.tables).reduce((sum, count) => sum + parseInt(count), 0)}</div>
+            {Object.entries(dbStats.tables).map(([key, val]) => (
+              <div key={key}>{key}: {val}</div>
+            ))}
           </div>
         </div>
       )}

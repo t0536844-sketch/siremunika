@@ -192,6 +192,180 @@ Include all network IPs that clients might use to access the frontend:
 CORS_ORIGIN=http://localhost:5173,http://192.168.0.233:5173,http://192.168.1.250:5173
 ```
 
+## HuggingFace Spaces deployment (Express + SQLite Docker)
+
+The project deploys to HuggingFace Spaces as a **Docker container** running Express + SQLite, which serves both the REST API and the static frontend from port 7860. This replaces the local architecture (Vite on 5173 + Express+SQL Server on 3100) with a single-server cloud deployment.
+
+### Architecture comparison
+
+| Environment | Frontend | API | Database | Port |
+|-------------|----------|-----|----------|------|
+| Local dev | Vite dev server | Express + SQL Server | SIMRemunerasi (SQL Server 2019) | 5173 + 3100 |
+| HF Spaces | Express static middleware | Express + SQLite | siremunika.db (SQLite) | 7860 |
+
+### Directory structure for HF deployment
+
+```
+hf-server/
+  package.json       — express, cors, sql.js, uuid
+  package-lock.json  — REQUIRED (Docker npm ci fails without it)
+  server.js          — Express app: init SQLite DB, mount CRUD routes, serve static frontend, listen on 7860
+  data/
+    siremunika.db    — SQLite database file (created at runtime, persisted to disk)
+```
+
+### Dockerfile (multi-stage: frontend build + backend build + runtime)
+
+```dockerfile
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2: Build backend (hf-server)
+FROM node:20-alpine AS backend-builder
+WORKDIR /server
+COPY hf-server/package.json hf-server/package-lock.json* ./
+RUN npm ci --only=production
+COPY hf-server/ ./
+
+# Stage 3: Runtime — Express serves API + static frontend + SQLite
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=backend-builder /server /app/server
+COPY --from=frontend-builder /app/dist /app/server/public
+RUN mkdir -p /app/server/data
+EXPOSE 7860
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:7860/health || exit 1
+ENV NODE_ENV=production
+ENV PORT=7860
+CMD ["node", "/app/server/server.js"]
+```
+
+**Key points:**
+- Frontend build output (`dist/`) is copied to `/app/server/public/` — Express serves it via `express.static()`.
+- SQLite database is created in `/app/server/data/` — persisted to disk via `saveDb()` function.
+- Port must be **7860** (HF Spaces requirement).
+- No nginx needed — Express handles both API routes and static file serving.
+
+### SQLite server implementation patterns
+
+The `hf-server/server.js` uses `sql.js` (pure JavaScript SQLite via WASM) instead of `better-sqlite3` (native C++ bindings). This is critical for Docker Alpine compatibility.
+
+**Async startup pattern:**
+```javascript
+const initSqlJs = require('sql.js');
+async function start() {
+  const SQL = await initSqlJs();  // Load WASM binary
+  const db = initDatabase(SQL);   // Create/open DB from file or fresh
+  app.listen(PORT, '0.0.0.0', () => { ... });
+}
+start().catch(e => { process.exit(1); });
+```
+
+**Helper functions (abstract sql.js awkward API):**
+```javascript
+function queryAll(sql, params = []) {
+  const stmt = db.prepare(sql);
+  if (params.length) stmt.bind(params);
+  const results = [];
+  while (stmt.step()) results.push(stmt.getAsObject());
+  stmt.free();  // CRITICAL: must free to avoid memory leaks
+  return results;
+}
+function queryOne(sql, params = []) { return queryAll(sql, params)[0] || null; }
+function queryRun(sql, params = []) { try { db.run(sql, params); return true; } catch(e) { return false; } }
+function saveDb() {
+  const data = db.export();  // Returns Uint8Array
+  fs.writeFileSync(DB_PATH, Buffer.from(data));
+}
+```
+
+**CRUD endpoints use synchronous helpers (not async):** Unlike the local Express+SQL Server endpoints which use `async/await` with `mssql`, the SQLite endpoints are synchronous — all sql.js operations after `initSqlJs()` are synchronous. Call `saveDb()` after every write operation to persist data.
+
+**Database persistence:** Call `saveDb()` after every INSERT/UPDATE/DELETE. Without this, data is only in memory and lost on restart. On startup, check if `siremunika.db` file exists and load it; otherwise create fresh with seed data.
+
+### .gitignore and .dockerignore configuration
+
+**`.gitignore`** — exclude local-only files:
+```
+api-bridge/          # Local SQL Server API, not for cloud
+hf-server/node_modules/  # Rebuilt in Docker
+hf-server/data/      # Runtime DB file, not for git
+api key.txt          # Credentials — NEVER commit
+*token* *secret* *credential*
+```
+
+**`.dockerignore`** — exclude build artifacts but INCLUDE `hf-server/` source:
+```
+node_modules/
+dist/
+.git/
+.qwen/
+report/
+api-bridge/              # Not needed in Docker
+hf-server/node_modules/  # Rebuilt by npm ci
+hf-server/data/          # Runtime, not in image
+```
+
+**CRITICAL:** `.dockerignore` must NOT exclude `hf-server/` directory itself — the Dockerfile needs `COPY hf-server/ ./` to work. Only exclude `hf-server/node_modules/` and `hf-server/data/`.
+
+### HF Spaces git push — merge conflict resolution
+
+When pushing to an HF Space that was created via the web UI, the Space has an initial commit with template files (`README.md`, `.gitattributes`, etc.). This causes merge conflicts:
+
+```bash
+git fetch hf
+git merge hf/main --allow-unrelated-histories -m "Merge HF initial commit"
+# Resolve README.md conflict: keep YOUR project's frontmatter + content
+# Delete HF template files (style.css, etc.) that don't belong
+git add -A && git commit && git push hf main
+```
+
+**README.md frontmatter requirements for HF Spaces:**
+```yaml
+---
+title: SIM Remunerasi RSUD Mimika
+emoji: 🏥
+colorFrom: green    # Must be: red/yellow/green/blue/indigo/purple/pink/gray
+colorTo: blue        # Same valid color list
+sdk: docker
+app_port: 7860
+pinned: false
+license: openrail
+---
+```
+
+`colorFrom` and `colorTo` must be from the **valid list only** — using other colors (teal, emerald, orange) causes the push to be rejected by HF's pre-receive hook.
+
+### Docker build failure: missing package-lock.json
+
+**The #1 cause of Docker build failure on HF Spaces:** `npm ci` in the Dockerfile requires `package-lock.json`. If it's missing from `hf-server/`, the backend-builder stage fails with exit code 1.
+
+**Fix:** Always run `npm install` in `hf-server/` locally to generate `package-lock.json` before committing and pushing. Verify the file exists:
+```bash
+cd hf-server && npm install && ls package-lock.json
+```
+
+### HF Spaces API URL detection
+
+The frontend `dataService.ts` uses port-based detection to route API calls correctly:
+
+```typescript
+const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') ||
+  (window.location.port === '5173' || window.location.port === '5174'
+    ? `http://${window.location.hostname}:3100`  // Local: separate API server
+    : '');  // HF Spaces: same server, relative URLs
+```
+
+On HF Spaces, `window.location.port` is empty (HTTPS default port 443) or the HF proxy port — NOT 5173/5174. So the condition falls through to empty string, meaning API calls use relative URLs like `/health`, `/api/export`, `/api/pendapatan` — which resolve to the same Express server serving the frontend.
+
+**`NetworkDatabase.tsx`** uses the same pattern for its default `apiUrl` state.
+
 ## Common pitfalls
 
 - **`ERR_FAILED` with 200 status**: Usually means the API bridge server is not running. Always start `node server.js` in the `api-bridge/` directory before testing.
@@ -201,5 +375,8 @@ CORS_ORIGIN=http://localhost:5173,http://192.168.0.233:5173,http://192.168.1.250
 - **FK name resolution failures**: If the frontend sends `"Poli Umum"` as `unit` but that name doesn't exist in `ref_unit`, the server returns 400 with `Cannot resolve unit='...'`. Make sure reference data is seeded.
 - **`SCOPE_IDENTITY()` for auto‑increment**: New nakes/user records use `INSERT …; SELECT SCOPE_IDENTITY() AS newId` — the response includes the generated ID for the frontend to track.
 - **Frontend field names are camelCase**: The server endpoints accept camelCase (`jenisPelayanan`, `nilaiPendapatan`, `statusAktif`) and internally resolve to snake_case columns (`jenis_pelayanan_id`, `nilai_pendapatan`, `status_aktif`). This mirrors the view‑based export asymmetry documented in the architecture memory.
+- **HF Spaces Docker build fails without package-lock.json**: `npm ci` requires an exact lockfile. Always generate `hf-server/package-lock.json` via `npm install` before pushing.
+- **HF Spaces README colorFrom/colorTo validation**: Only `red, yellow, green, blue, indigo, purple, pink, gray` are valid. Other color names cause push rejection.
+- **HF Spaces merge conflicts on first push**: Use `--allow-unrelated-histories` and resolve README.md conflict keeping your project's content.
 
 ---

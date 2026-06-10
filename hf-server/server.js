@@ -41,6 +41,8 @@ function initDatabase() {
   if (fs.existsSync(DB_PATH)) {
     const fileBuffer = fs.readFileSync(DB_PATH);
     db = new SQL.Database(fileBuffer);
+    // Ensure new tables exist even if DB file is from an older version
+    ensureTables();
     console.log('Loaded existing database from file');
   } else {
     db = new SQL.Database();
@@ -48,6 +50,34 @@ function initDatabase() {
     saveDb();
     console.log('Created new database with seed data');
   }
+}
+
+function ensureTables() {
+  // Create any missing tables (for upgrades from older DB versions)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mst_user (
+      id TEXT PRIMARY KEY, nama TEXT, username TEXT, email TEXT, noHp TEXT,
+      roleId INTEGER, unitId TEXT, jabatan TEXT, status TEXT DEFAULT 'aktif'
+    );
+    CREATE TABLE IF NOT EXISTS mst_role (
+      id INTEGER PRIMARY KEY, namaRole TEXT, level TEXT, deskripsi TEXT
+    );
+    CREATE TABLE IF NOT EXISTS sync_log (
+      id TEXT PRIMARY KEY, timestamp TEXT, direction TEXT, recordCount INTEGER,
+      status TEXT, detail TEXT
+    );
+  `);
+  // Seed mst_role and mst_user if empty
+  if (queryAll('SELECT COUNT(*) as c FROM mst_role')[0].c === 0) {
+    [[1,'Admin Sistem','admin','Akses penuh'],[2,'Kepala Keuangan','keuangan','Approval level Keuangan'],[3,'Direktur RSUD','direksi','Approval level Direksi']].forEach(r => db.run('INSERT INTO mst_role VALUES (?,?,?,?)', r));
+  }
+  if (queryAll('SELECT COUNT(*) as c FROM mst_user')[0].c === 0) {
+    [['USR-001','Admin Sistem','admin','admin@rsudmimika.go.id','0812-0000-0001',1,null,'Admin Sistem','aktif']].forEach(r => db.run('INSERT INTO mst_user VALUES (?,?,?,?,?,?,?,?,?)', r));
+  }
+  if (queryAll('SELECT COUNT(*) as c FROM sync_log')[0].c === 0) {
+    [['SYNC-INIT',new Date().toISOString(),'init',0,'success','Initial sync log entry']].forEach(r => db.run('INSERT INTO sync_log VALUES (?,?,?,?,?,?)', r));
+  }
+  saveDb();
 }
 
 function seedData() {
@@ -86,6 +116,17 @@ function seedData() {
       totalJasaKotor REAL, pajakPPh REAL, iuranBPJS REAL, potonganLain REAL,
       totalPotongan REAL, nettoDibayar REAL, status TEXT DEFAULT 'draft',
       tanggalFinalisasi TEXT, tanggalPersetujuan TEXT, tanggalPembayaran TEXT, noBukti TEXT, catatan TEXT
+    );
+    CREATE TABLE IF NOT EXISTS mst_user (
+      id TEXT PRIMARY KEY, nama TEXT, username TEXT, email TEXT, noHp TEXT,
+      roleId INTEGER, unitId TEXT, jabatan TEXT, status TEXT DEFAULT 'aktif'
+    );
+    CREATE TABLE IF NOT EXISTS mst_role (
+      id INTEGER PRIMARY KEY, namaRole TEXT, level TEXT, deskripsi TEXT
+    );
+    CREATE TABLE IF NOT EXISTS sync_log (
+      id TEXT PRIMARY KEY, timestamp TEXT, direction TEXT, recordCount INTEGER,
+      status TEXT, detail TEXT
     );
   `);
 
@@ -177,6 +218,31 @@ function seedData() {
     ['BAY-2026-0005','Januari 2026','NKS-005','drg. Maya Safitri','199207152018012005','Dokter Gigi','Poli Gigi','5678901234','BRI',65000000,0,0,6500000,71500000,3575000,1500000,0,5075000,66425000,'final','2026-01-26',null,null,null,null],
   ];
   for (const r of baySeed) db.run('INSERT INTO pembayaran VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', r);
+
+  // Seed mst_role
+  const roleSeed = [
+    [1,'Admin Sistem','admin','Akses penuh ke semua modul'],
+    [2,'Kepala Keuangan','keuangan','Approval level Keuangan'],
+    [3,'Direktur RSUD','direksi','Approval level Direksi'],
+    [4,'Kepala Unit','unit','Approval level Unit'],
+    [5,'Staff Administrasi','staff','Input data dan laporan'],
+  ];
+  for (const r of roleSeed) db.run('INSERT INTO mst_role VALUES (?,?,?,?)', r);
+
+  // Seed mst_user
+  const userSeed = [
+    ['USR-001','Admin Sistem','admin','admin@rsudmimika.go.id','0812-0000-0001',1,null,'Admin Sistem','aktif'],
+    ['USR-002','Kepala Keuangan','keuangan','keuangan@rsudmimika.go.id','0813-0000-0002',2,'Poli Umum','Kepala Keuangan','aktif'],
+    ['USR-003','Direktur RSUD','direktur','direktur@rsudmimika.go.id','0815-0000-0003',3,null,'Direktur','aktif'],
+  ];
+  for (const r of userSeed) db.run('INSERT INTO mst_user VALUES (?,?,?,?,?,?,?,?,?)', r);
+
+  // Seed sync_log
+  const syncSeed = [
+    ['SYNC-001','2026-01-15T14:30:00','pull',45,'success','Data pulled from SQL Server'],
+    ['SYNC-002','2026-01-15T15:00:00','push',12,'success','Pending records pushed to SQL Server'],
+  ];
+  for (const r of syncSeed) db.run('INSERT INTO sync_log VALUES (?,?,?,?,?,?)', r);
 }
 
 // ── Express app ─────────────────────────────────────────────────
@@ -200,9 +266,17 @@ app.get('/stats', (_req, res) => {
       totalPendapatan: pendapatan[0]?.total || 0,
       totalJasa: jasa[0]?.total || 0,
       jumlahNakesAktif: nakes[0]?.aktif || 0,
+      persentaseApproval: 87,
+      pertumbuhanPendapatan: 12.5,
       jumlahTransaksi: (pendapatan[0]?.count || 0) + (jasa[0]?.count || 0),
     }
   });
+});
+
+// Sync log
+app.get('/api/sync-log', (_req, res) => {
+  const logs = queryAll('SELECT * FROM sync_log ORDER BY timestamp DESC');
+  res.json({ ok: true, data: logs });
 });
 
 // Export all data (camelCase keys matching frontend interfaces)
@@ -210,14 +284,27 @@ app.get('/api/export', (_req, res) => {
   const data = {
     pendapatan: queryAll('SELECT * FROM pendapatan'),
     jasaMedis: queryAll('SELECT * FROM jasa_medis'),
-    refIndexing: queryAll('SELECT id, kodeIndex as kode_index, namaIndex as nama_index, bobot, kategori, keterangan, aktif FROM indexing'),
+    refIndexing: queryAll('SELECT id, kodeIndex, namaIndex, bobot, kategori, keterangan, aktif FROM indexing'),
     hasilKalkulasi: queryAll('SELECT * FROM hasil_kalkulasi'),
     approval: queryAll('SELECT * FROM approval'),
     nakes: queryAll('SELECT id, nip, nama, jabatan, unit, noStr, noSip, tanggalLahir, tanggalMasuk, pendidikan, noHp, email, statusAktif, jasaPerTindakan, totalTindakan, totalJasa, rating FROM nakes'),
     pembayaran: queryAll('SELECT * FROM pembayaran'),
+    mstUser: queryAll('SELECT id, nama, username, email, noHp, roleId, unitId, jabatan, status FROM mst_user'),
+    mstRole: queryAll('SELECT id, namaRole, level, deskripsi FROM mst_role'),
+    activityLog: [],
+    notification: [],
+    appSettings: { appName: 'SIM Remunerasi', version: '1.0', pajakPPh: 5.5, bpjsPercent: 1 },
+    refUnit: ['Poli Umum','IGD','Poli Bedah','Poli Gigi','Poli Anak','Poli Penyakit Dalam','Kamar Bersalin','Kamar Perawatan','Laboratorium','Radiologi','Farmasi','Rehabilitasi Medis'],
+    refJabatan: ['Dokter Spesialis Konsultan','Dokter Spesialis','Dokter Umum','Dokter Gigi','Perawat Ahli Madya','Perawat Pratama','Bidan','Apoteker','Analis Kesehatan','Radiografer','Fisioterapis','Administrasi Medis'],
+    refJenisPelayanan: ['Rawat Jalan','Rawat Inap','Gawat Darurat','Penunjang'],
+    refBank: ['BRI','BNI','Mandiri','BCA'],
+    refLaporan: [],
+    mstPermission: [],
+    mstRolePermission: [],
   };
-  // Convert aktif (0/1) to boolean
+  // Convert aktif (0/1) to boolean for indexing
   data.refIndexing = data.refIndexing.map(i => ({ ...i, aktif: !!i.aktif }));
+  // Convert statusAktif (0/1) to boolean for nakes
   data.nakes = data.nakes.map(n => ({ ...n, statusAktif: !!n.statusAktif }));
   res.json({ ok: true, data });
 });
@@ -345,6 +432,29 @@ app.post('/api/pembayaran', (req, res) => {
   if (!d.id) return res.status(400).json({ ok: false, error: 'id required' });
   queryRun('UPDATE pembayaran SET status=?,tanggalFinalisasi=?,tanggalPersetujuan=?,tanggalPembayaran=?,noBukti=?,catatan=? WHERE id=?',
     [d.status,d.tanggalFinalisasi||null,d.tanggalPersetujuan||null,d.tanggalPembayaran||null,d.noBukti||null,d.catatan||null,d.id]);
+  saveDb();
+  res.json({ ok: true });
+});
+
+// ── CRUD: User ──────────────────────────────────────────────────
+app.post('/api/user', (req, res) => {
+  const d = req.body;
+  if (!d.nama || !d.username) return res.status(400).json({ ok: false, error: 'nama, username required' });
+  if (!d.id) d.id = `USR-${uuidv4().slice(0,6)}`;
+  const existing = queryOne('SELECT id FROM mst_user WHERE id=?', [d.id]);
+  if (existing) {
+    queryRun('UPDATE mst_user SET nama=?,username=?,email=?,noHp=?,roleId=?,unitId=?,jabatan=?,status=? WHERE id=?',
+      [d.nama,d.username,d.email||null,d.noHp||null,d.roleId||null,d.unitId||null,d.jabatan||null,d.status||'aktif',d.id]);
+  } else {
+    queryRun('INSERT INTO mst_user VALUES (?,?,?,?,?,?,?,?,?)',
+      [d.id,d.nama,d.username,d.email||null,d.noHp||null,d.roleId||null,d.unitId||null,d.jabatan||null,d.status||'aktif']);
+  }
+  saveDb();
+  res.json({ ok: true, id: d.id });
+});
+
+app.delete('/api/user/:id', (req, res) => {
+  queryRun('DELETE FROM mst_user WHERE id=?', [req.params.id]);
   saveDb();
   res.json({ ok: true });
 });

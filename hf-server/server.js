@@ -7,6 +7,96 @@ const PORT = process.env.PORT || 7860;
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://npasitielsksoksctqbv.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wYXNpdGllbHNrc29rc2N0cWJ2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTA1NTAwMSwiZXhwIjoyMDk2NjMxMDAxfQ.yLd9NAEEx6LZprt2sKo-naAAtqkntbWH436v7oRuUhI';
 
+// ── camelCase key transformation ───────────────────────────────
+// PostgreSQL normalizes camelCase identifiers to lowercase.
+// Supabase PostgREST returns lowercase keys: jenispelayanan, jumlahpasien, etc.
+// Frontend TypeScript interfaces expect camelCase: jenisPelayanan, jumlahPasien, etc.
+// A generic snake_case→camelCase converter won't work because PostgreSQL merges
+// multi-word names into a single lowercase string (e.g. totalJasaMedis → totaljasamedis).
+const CAMEL_CASE_MAP = {
+  // pendapatan
+  jenispelayanan: 'jenisPelayanan',
+  jumlahpasien: 'jumlahPasien',
+  nilaipendapatan: 'nilaiPendapatan',
+  // jasa_medis
+  tarifjasa: 'tarifJasa',
+  jumlahtindakan: 'jumlahTindakan',
+  totaljasa: 'totalJasa',
+  // indexing
+  kodeindex: 'kodeIndex',
+  namaindex: 'namaIndex',
+  // hasil_kalkulasi
+  totalpendapatan: 'totalPendapatan',
+  totalbeban: 'totalBeban',
+  totaljasamedis: 'totalJasaMedis',
+  totaljasaparamedis: 'totalJasaParamedis',
+  totaljasapenunjang: 'totalJasaPenunjang',
+  bonusprestasi: 'bonusPrestasi',
+  // approval
+  tanggalpengajuan: 'tanggalPengajuan',
+  // nakes
+  nostr: 'noStr',
+  nosip: 'noSip',
+  tanggallahir: 'tanggalLahir',
+  tanggalmasuk: 'tanggalMasuk',
+  nohp: 'noHp',
+  statusaktif: 'statusAktif',
+  jasapertindakan: 'jasaPerTindakan',
+  totaltindakan: 'totalTindakan',
+  // pembayaran
+  nakesid: 'nakesId',
+  nakesnama: 'nakesNama',
+  norekening: 'noRekening',
+  jasamedis: 'jasaMedis',
+  jasaparamedis: 'jasaParamedis',
+  jasapenunjang: 'jasaPenunjang',
+  totaljasakotor: 'totalJasaKotor',
+  pajakpph: 'pajakPPh',
+  iuranbpjs: 'iuranBPJS',
+  potonganlain: 'potonganLain',
+  totalpotongan: 'totalPotongan',
+  nettodibayar: 'nettoDibayar',
+  tanggalfinalisasi: 'tanggalFinalisasi',
+  tanggalpersetujuan: 'tanggalPersetujuan',
+  tanggalpembayaran: 'tanggalPembayaran',
+  nobukti: 'noBukti',
+  // mst_role
+  namarole: 'namaRole',
+  // mst_user
+  roleid: 'roleId',
+  unitid: 'unitId',
+};
+
+// Reverse map: camelCase → lowercase (for sending data TO Supabase)
+const LOWER_CASE_MAP = {};
+for (const [lc, cc] of Object.entries(CAMEL_CASE_MAP)) {
+  LOWER_CASE_MAP[cc] = lc;
+}
+
+function toCamelKey(key) {
+  return CAMEL_CASE_MAP[key] || key;
+}
+
+function toLowerKey(key) {
+  return LOWER_CASE_MAP[key] || key;
+}
+
+function transformRow(row, direction = 'toCamel') {
+  if (!row || typeof row !== 'object') return row;
+  const fn = direction === 'toCamel' ? toCamelKey : toLowerKey;
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[fn(k)] = Array.isArray(v) ? v.map(r => transformRow(r, direction)) : (v && typeof v === 'object' ? transformRow(v, direction) : v);
+  }
+  return out;
+}
+
+function transformData(data, direction = 'toCamel') {
+  if (Array.isArray(data)) return data.map(r => transformRow(r, direction));
+  if (data && typeof data === 'object') return transformRow(data, direction);
+  return data;
+}
+
 // ── Supabase REST API helper ──────────────────────────────────
 const sbHeaders = {
   'apikey': SUPABASE_KEY,
@@ -25,15 +115,20 @@ async function sbFetch(table, method = 'GET', body = null, query = '') {
 }
 
 async function sbSelect(table, select = '*', query = '') {
-  return sbFetch(table, 'GET', null, `?select=${select}${query}`);
+  const data = await sbFetch(table, 'GET', null, `?select=${select}${query}`);
+  return transformData(data, 'toCamel');
 }
 
 async function sbInsert(table, rows) {
-  return sbFetch(table, 'POST', rows);
+  const payload = transformData(rows, 'toLower');
+  const data = await sbFetch(table, 'POST', payload);
+  return transformData(data, 'toCamel');
 }
 
 async function sbUpdate(table, id, data) {
-  return sbFetch(table, 'PATCH', data, `?id=eq.${encodeURIComponent(id)}`);
+  const payload = transformRow(data, 'toLower');
+  const result = await sbFetch(table, 'PATCH', payload, `?id=eq.${encodeURIComponent(id)}`);
+  return transformData(result, 'toCamel');
 }
 
 async function sbDelete(table, id) {
@@ -41,12 +136,14 @@ async function sbDelete(table, id) {
 }
 
 async function sbUpsert(table, rows) {
+  const payload = transformData(rows, 'toLower');
   const headers = { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates' };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method: 'POST', headers, body: JSON.stringify(rows),
+    method: 'POST', headers, body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Supabase upsert ${table}: ${res.status} ${await res.text()}`);
-  return res.json();
+  const data = await res.json();
+  return transformData(data, 'toCamel');
 }
 
 // ── Express app ─────────────────────────────────────────────────
@@ -62,14 +159,14 @@ app.get('/health', (_req, res) => {
 // Stats
 app.get('/stats', async (_req, res) => {
   try {
-    const pendapatan = await sbSelect('pendapatan', 'count,nilaiPendapatan');
-    const jasa = await sbSelect('jasa_medis', 'count,totalJasa');
-    const nakes = await sbSelect('nakes', 'count,statusAktif');
+    const pendapatan = await sbSelect('pendapatan', 'nilaipendapatan');
+    const jasa = await sbSelect('jasa_medis', 'totaljasa');
+    const nakes = await sbSelect('nakes', 'statusaktif');
     res.json({
       ok: true,
       data: {
-        totalPendapatan: pendapatan.reduce((s, r) => s + r.nilaiPendapatan, 0),
-        totalJasa: jasa.reduce((s, r) => s + r.totalJasa, 0),
+        totalPendapatan: pendapatan.reduce((s, r) => s + (r.nilaiPendapatan || 0), 0),
+        totalJasa: jasa.reduce((s, r) => s + (r.totalJasa || 0), 0),
         jumlahNakesAktif: nakes.filter(r => r.statusAktif).length,
         persentaseApproval: 87,
         pertumbuhanPendapatan: 12.5,
@@ -219,7 +316,7 @@ app.delete('/api/nakes/:id', async (req, res) => {
 
 app.patch('/api/nakes/:id/toggle-status', async (req, res) => {
   try {
-    const current = await sbSelect('nakes', 'statusAktif', `&id=eq.${req.params.id}`);
+    const current = await sbSelect('nakes', 'statusaktif', `&id=eq.${req.params.id}`);
     const newVal = !current[0].statusAktif;
     await sbUpdate('nakes', req.params.id, { statusAktif: newVal });
     res.json({ ok: true, statusAktif: newVal });

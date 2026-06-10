@@ -162,10 +162,10 @@ export default function ProfilNakes() {
           (filterJabatan === 'Semua' || n.jabatan === filterJabatan) &&
           (filterStatus === 'Semua' ||
             (filterStatus === 'Aktif' ? n.statusAktif : !n.statusAktif)) &&
-          (n.nama.toLowerCase().includes(search.toLowerCase()) ||
-            n.nip.includes(search) ||
-            n.unit.toLowerCase().includes(search.toLowerCase()) ||
-            n.email.toLowerCase().includes(search.toLowerCase()))
+          ((n.nama || '').toLowerCase().includes(search.toLowerCase()) ||
+            (n.nip || '').includes(search) ||
+            (n.unit || '').toLowerCase().includes(search.toLowerCase()) ||
+            (n.email || '').toLowerCase().includes(search.toLowerCase()))
       ),
     [items, search, filterUnit, filterJabatan, filterStatus]
   );
@@ -175,8 +175,8 @@ export default function ProfilNakes() {
       total: items.length,
       aktif: items.filter((n) => n.statusAktif).length,
       nonaktif: items.filter((n) => !n.statusAktif).length,
-      totalJasa: items.reduce((s, n) => s + n.totalJasa, 0),
-      avgRating: items.length ? items.reduce((s, n) => s + n.rating, 0) / items.length : 0,
+      totalJasa: items.reduce((s, n) => s + (n.totalJasa || 0), 0),
+      avgRating: items.length ? items.reduce((s, n) => s + (n.rating || 0), 0) / items.length : 0,
     }),
     [items]
   );
@@ -373,18 +373,18 @@ export default function ProfilNakes() {
   };
 
   // ── Render bintang ────────────────────────────────────────────────────────────
-  const renderStars = (rating: number, interactive = false, onChange?: (v: number) => void) => (
+  const renderStars = (rating: number | null, interactive = false, onChange?: (v: number) => void) => (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((n) => (
         <Star
           key={n}
           onClick={() => interactive && onChange?.(n)}
           className={`${interactive ? 'cursor-pointer hover:scale-110' : ''} w-3.5 h-3.5 transition-transform ${
-            n <= Math.floor(rating) ? 'text-amber-400 fill-amber-400' : 'text-slate-200 fill-slate-200'
+            n <= Math.floor(rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-slate-200 fill-slate-200'
           }`}
         />
       ))}
-      <span className="ml-1 text-xs text-slate-600 font-semibold">{rating.toFixed(1)}</span>
+      <span className="ml-1 text-xs text-slate-600 font-semibold">{(rating ?? 0).toFixed(1)}</span>
     </div>
   );
 
@@ -398,7 +398,7 @@ export default function ProfilNakes() {
     'from-emerald-400 to-green-500',
   ];
   const getAvatarColor = (id: string) =>
-    avatarColors[parseInt(id.replace(/\D/g, ''), 10) % avatarColors.length];
+    avatarColors[parseInt((id || '0').replace(/\D/g, ''), 10) % avatarColors.length];
 
   // ═══════════════════════════════════════════════════════════════════════════════
   return (
@@ -539,7 +539,7 @@ export default function ProfilNakes() {
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 bg-gradient-to-br ${getAvatarColor(n.id)} rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm`}>
-                        {n.nama.replace(/^(dr\.|drg\.|Ns\.|Bidan|Apt\.)\s*/i, '').substring(0, 2).toUpperCase()}
+                        {(n.nama || '??').replace(/^(dr\.|drg\.|Ns\.|Bidan|Apt\.)\s*/i, '').substring(0, 2).toUpperCase()}
                       </div>
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-800 truncate">{n.nama}</p>
@@ -625,7 +625,7 @@ export default function ProfilNakes() {
         {/* Footer tabel */}
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span>Menampilkan <b className="text-slate-700">{filtered.length}</b> dari <b className="text-slate-700">{items.length}</b> nakes</span>
-          <span>Total Jasa: <b className="text-rose-700">{formatRupiah(filtered.reduce((s, n) => s + n.totalJasa, 0))}</b></span>
+          <span>Total Jasa: <b className="text-rose-700">{formatRupiah(filtered.reduce((s, n) => s + (n.totalJasa || 0), 0))}</b></span>
         </div>
       </div>
 
@@ -638,7 +638,7 @@ export default function ProfilNakes() {
             {/* Header */}
             <div className={`bg-gradient-to-r from-rose-700 to-pink-700 text-white px-6 py-6 flex items-start gap-4`}>
               <div className={`w-20 h-20 bg-gradient-to-br ${getAvatarColor(activeNakes.id)} rounded-2xl flex items-center justify-center text-white text-2xl font-bold flex-shrink-0 border-2 border-white/30`}>
-                {activeNakes.nama.replace(/^(dr\.|drg\.|Ns\.|Bidan|Apt\.)\s*/i, '').substring(0, 2).toUpperCase()}
+                {(activeNakes.nama || '??').replace(/^(dr\.|drg\.|Ns\.|Bidan|Apt\.)\s*/i, '').substring(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-xl leading-tight">{activeNakes.nama}</h3>
@@ -987,7 +987,7 @@ export default function ProfilNakes() {
               {/* Kartu info nakes */}
               <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3 mb-5">
                 <div className={`w-11 h-11 bg-gradient-to-br ${getAvatarColor(activeNakes.id)} rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>
-                  {activeNakes.nama.replace(/^(dr\.|drg\.|Ns\.|Bidan|Apt\.)\s*/i, '').substring(0, 2).toUpperCase()}
+                  {(activeNakes.nama || '??').replace(/^(dr\.|drg\.|Ns\.|Bidan|Apt\.)\s*/i, '').substring(0, 2).toUpperCase()}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{activeNakes.nama}</p>

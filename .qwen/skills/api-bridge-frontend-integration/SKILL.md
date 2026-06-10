@@ -379,4 +379,88 @@ On HF Spaces, `window.location.port` is empty (HTTPS default port 443) or the HF
 - **HF Spaces README colorFrom/colorTo validation**: Only `red, yellow, green, blue, indigo, purple, pink, gray` are valid. Other color names cause push rejection.
 - **HF Spaces merge conflicts on first push**: Use `--allow-unrelated-histories` and resolve README.md conflict keeping your project's content.
 
+## API response format must match between local and HF servers
+
+The HF server (`hf-server/server.js`) and local API bridge (`api-bridge/server.js`) must return **identical response structures** from `/api/export`. If keys or column names differ, the frontend crashes with `TypeError: Cannot convert undefined or null to object` because `Object.keys()` receives null/undefined when expected keys are missing.
+
+### Critical requirements for `/api/export` response
+
+The response must include **all keys** that the frontend expects, even if some are empty arrays or static data. Missing keys cause `Object.keys(null)` crashes in components that iterate over the data structure.
+
+```javascript
+// MINIMUM required keys in /api/export response data object
+const data = {
+  pendapatan, jasaMedis, refIndexing, hasilKalkulasi, approval,
+  nakes, pembayaran, mstUser, mstRole, activityLog, notification,
+  appSettings, refUnit, refJabatan, refJenisPelayanan, refBank,
+  refLaporan, mstPermission, mstRolePermission,
+};
+```
+
+### Column names must be camelCase (matching frontend interfaces)
+
+SQLite column names in SELECT queries must produce **camelCase** keys matching the frontend TypeScript interfaces. If the table uses camelCase column names directly (like `kodeIndex`, `namaIndex`), the SELECT can use them directly. If the table uses snake_case, you must alias:
+
+```javascript
+// WRONG — returns snake_case keys the frontend doesn't recognize
+refIndexing: queryAll('SELECT * FROM indexing'),  // returns { kode_index, nama_index }
+
+// CORRECT — returns camelCase keys matching frontend Indexing interface
+refIndexing: queryAll('SELECT id, kodeIndex, namaIndex, bobot, kategori, keterangan, aktif FROM indexing'),
+```
+
+### Missing API endpoints cause HTML fallback (not JSON)
+
+When Express serves both API and static frontend from the same server (HF Spaces Docker), the catch-all route `app.get('*', ...)` serves `index.html` for ANY undefined route. This means:
+
+- If `/api/sync-log` endpoint doesn't exist, Express falls through to `app.get('*', ...)` which returns `index.html` (HTML content).
+- The frontend tries to parse this as JSON → `SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON`
+
+**Fix:** Define ALL API endpoints BEFORE the catch-all static serving route. Required endpoints that the frontend calls:
+
+| Endpoint | Used by | Purpose |
+|----------|---------|---------|
+| `/health` | NetworkDatabase | Connection check |
+| `/stats` | Dashboard | Dashboard statistics |
+| `/api/export` | All pages (via dataService getters) | Load all data |
+| `/api/sync-log` | NetworkDatabase | Sync history |
+| `/api/pendapatan` | InputPendapatan | Save/delete pendapatan |
+| `/api/jasa-medis` | InputJasa | Save/delete jasa medis |
+| `/api/indexing` | Indexing | Save/delete indexing |
+| `/api/approval` | Approval | Update approval status |
+| `/api/hasil-kalkulasi` | Hasil | Update hasil status |
+| `/api/nakes` | ProfilNakes | Save/delete/toggle nakes |
+| `/api/user` | ManajemenUser | Save/delete user |
+| `/api/pembayaran` | OutputPembayaran | Update pembayaran status |
+
+**Rule:** Every endpoint that exists in `api-bridge/server.js` must also exist in `hf-server/server.js`. If an endpoint is missing, the frontend gets HTML instead of JSON → crash.
+
+### Database upgrade handling for existing DB files
+
+When the HF Spaces Docker container restarts with a new version of `server.js` that adds new tables (e.g. `mst_user`, `mst_role`, `sync_log`), the existing `siremunika.db` file may persist from a previous deployment. The old DB file won't have the new tables, causing SELECT queries to fail.
+
+**Fix:** Add an `ensureTables()` function that runs after loading an existing DB file:
+
+```javascript
+function initDatabase() {
+  if (fs.existsSync(DB_PATH)) {
+    db = new SQL.Database(fs.readFileSync(DB_PATH));
+    ensureTables();  // Create missing tables, seed if empty
+  } else {
+    db = new SQL.Database();
+    seedData();
+    saveDb();
+  }
+}
+
+function ensureTables() {
+  db.exec('CREATE TABLE IF NOT EXISTS mst_user (...)');
+  db.exec('CREATE TABLE IF NOT EXISTS mst_role (...)');
+  db.exec('CREATE TABLE IF NOT EXISTS sync_log (...)');
+  // Seed only if table is empty (don't duplicate data)
+  if (queryAll('SELECT COUNT(*) as c FROM mst_role')[0].c === 0) { ... seed ... }
+  saveDb();
+}
+```
+
 ---

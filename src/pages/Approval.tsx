@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Component } from 'react';
 import {
   CheckCircle2, XCircle, Clock, AlertTriangle, Filter,
   MessageSquare, User, Building2, FileText, Wallet,
@@ -43,6 +43,26 @@ const tipeColor: Record<string, string> = {
   jasa:       'from-cyan-500 to-cyan-700',
   hasil:      'from-indigo-500 to-indigo-700',
 };
+
+// ─── Error Boundary untuk detail modal ────────────────────────
+class DetailErrorBoundary extends Component<{ children: React.ReactNode; onReset: () => void }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) return (
+      <div className="text-center py-8 px-4">
+        <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Gagal menampilkan detail</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Data tidak dapat diproses. Coba tutup dan buka kembali.</p>
+        <button onClick={() => { this.setState({ hasError: false }); this.props.onReset(); }}
+          className="mt-3 px-4 py-2 text-xs font-semibold bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition">
+          Tutup Modal
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 
 // ─── Extended ApprovalItem dengan riwayat ──────────────────────
 interface ApprovalItemExt extends ApprovalItem {
@@ -206,7 +226,7 @@ export default function Approval() {
     setProcessing(true);
     const now = new Date().toISOString();
 
-    setTimeout(() => {
+    setTimeout(async () => {
       setItems((prev) => prev.map((i) => {
         if (i.id !== item.id) return i;
         if (action === 'approve') {
@@ -238,9 +258,9 @@ export default function Approval() {
       // Sync to database
       try {
         if (action === 'approve') {
-          dataService.updateApproval({ id: item.id, status: 'approved', approvedBy: userName, approvedAt: now });
+          await dataService.updateApproval({ id: item.id, status: 'approved', approvedBy: userName, approvedAt: now });
         } else {
-          dataService.updateApproval({ id: item.id, status: 'rejected', rejectedBy: userName, rejectedAt: now, alasanTolak: rejectNote });
+          await dataService.updateApproval({ id: item.id, status: 'rejected', rejectedBy: userName, rejectedAt: now, alasanTolak: rejectNote });
         }
       } catch {
         showToast('warning', 'Updated locally only', 'Failed to sync to database');
@@ -252,13 +272,13 @@ export default function Approval() {
     }, 800);
   };
 
-  const handleRevert = (id: string) => {
+  const handleRevert = async (id: string) => {
     const item = items.find((i) => i.id === id);
     if (!item) return;
     setItems((prev) => prev.map((i) => i.id === id ? { ...i, status: 'pending' as const, approvedBy: undefined, approvedAt: undefined, rejectedBy: undefined, rejectedAt: undefined, alasanTolak: undefined } : i));
     showToast('info', 'Status dikembalikan', `${item.referensi} dikembalikan ke status "Menunggu"`);
     try {
-      dataService.updateApproval({ id, status: 'pending', approvedBy: undefined, approvedAt: undefined, rejectedBy: undefined, rejectedAt: undefined, alasanTolak: undefined });
+      await dataService.updateApproval({ id, status: 'pending', approvedBy: undefined, approvedAt: undefined, rejectedBy: undefined, rejectedAt: undefined, alasanTolak: undefined });
     } catch {
       showToast('warning', 'Updated locally only', 'Failed to sync to database');
     }
@@ -533,7 +553,7 @@ export default function Approval() {
             <div className={`bg-gradient-to-r ${tipeColor[detailItem.tipe]} text-white px-6 py-5 flex items-center justify-between flex-shrink-0`}>
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 bg-white/20 rounded-2xl flex items-center justify-center">
-                  {(() => { const IC = tipeIcon[detailItem.tipe]; return <IC className="w-5 h-5" />; })()}
+                  {(() => { const IC = tipeIcon[detailItem.tipe] || FileText; return <IC className="w-5 h-5" />; })()}
                 </div>
                 <div>
                   <h3 className="font-bold text-lg">Detail Pengajuan</h3>
@@ -550,7 +570,7 @@ export default function Approval() {
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: 'Referensi', value: detailItem.referensi, icon: Hash },
-                  { label: 'Nilai', value: formatRupiah(detailItem.nilai), icon: DollarSign },
+                  { label: 'Nilai', value: detailItem.nilai != null ? formatRupiah(detailItem.nilai) : '-', icon: DollarSign },
                   { label: 'Pengaju', value: detailItem.pengaju, icon: User },
                   { label: 'Tanggal Pengajuan', value: formatDate(detailItem.tanggalPengajuan), icon: CalendarDays },
                   { label: 'Level Approval', value: detailItem.level, icon: Building2 },

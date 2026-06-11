@@ -421,6 +421,23 @@ app.delete('/api/user/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ── CRUD: Role ──────────────────────────────────────────────────
+app.post('/api/role', async (req, res) => {
+  try {
+    const d = req.body;
+    if (!d.id) d.id = `ROL-${uuidv4().slice(0,6)}`;
+    await sbUpsert('mst_role', [d]);
+    res.json({ ok: true, id: d.id });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.delete('/api/role/:id', async (req, res) => {
+  try {
+    await sbDelete('mst_role', req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── Serve static frontend (no-cache for SPA updates) ───────────
 const publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir, {

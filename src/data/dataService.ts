@@ -323,6 +323,26 @@ export const dataService = {
   async deleteUser(id: string): Promise<any> {
     return apiFetch(`/api/user/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
+
+  // ─── Pembayaran ──────────────────────────────────────────────
+  async savePembayaran(item: any): Promise<any> {
+    return apiFetch('/api/pembayaran', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    });
+  },
+
+  // ─── Role ────────────────────────────────────────────────────
+  async saveRole(item: any): Promise<any> {
+    return apiFetch('/api/role', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    });
+  },
+
+  async deleteRole(id: string): Promise<any> {
+    return apiFetch(`/api/role/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
 };
 
 export default dataService;

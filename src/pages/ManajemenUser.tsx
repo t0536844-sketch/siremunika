@@ -173,23 +173,27 @@ export default function ManajemenUser() {
     }
   };
 
-  const handleToggleStatus = (id: string) => {
-    setUsers((prev) => prev.map((u) => {
-      if (u.id !== id) return u;
-      const next: UserStatus = u.status === 'aktif' ? 'nonaktif' : 'aktif';
-      showToast(next === 'aktif' ? 'success' : 'warning',
-        `User ${next === 'aktif' ? 'diaktifkan' : 'dinonaktifkan'}`, u.nama);
-      return { ...u, status: next };
-    }));
+  const handleToggleStatus = async (id: string) => {
+    const user = users.find(u => u.id === id);
+    if (!user) return;
+    const next: UserStatus = user.status === 'aktif' ? 'nonaktif' : 'aktif';
+    setUsers((prev) => prev.map((u) => u.id !== id ? u : { ...u, status: next }));
+    showToast(next === 'aktif' ? 'success' : 'warning',
+      `User ${next === 'aktif' ? 'diaktifkan' : 'dinonaktifkan'}`, user.nama);
+    try {
+      await dataService.saveUser({ id, status: next });
+    } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
-  const handleSuspend = (id: string) => {
-    setUsers((prev) => prev.map((u) => {
-      if (u.id !== id) return u;
-      showToast('error', 'User disuspend', u.nama);
-      return { ...u, status: 'suspend' as UserStatus };
-    }));
+  const handleSuspend = async (id: string) => {
+    const user = users.find(u => u.id === id);
+    if (!user) return;
+    setUsers((prev) => prev.map((u) => u.id !== id ? u : { ...u, status: 'suspend' as UserStatus }));
+    showToast('error', 'User disuspend', user.nama);
     setOpenMenuId(null);
+    try {
+      await dataService.saveUser({ id, status: 'suspend' });
+    } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
   const handleResetPassword = (user: UserAccount) => {
@@ -206,20 +210,22 @@ export default function ManajemenUser() {
     setTimeout(() => setCopiedPass(false), 2000);
   };
 
-  const handleToggle2FA = (id: string) => {
-    setUsers((prev) => prev.map((u) => {
-      if (u.id !== id) return u;
-      showToast('info', u.twoFactorEnabled ? '2FA dinonaktifkan' : '2FA diaktifkan', u.nama);
-      return { ...u, twoFactorEnabled: !u.twoFactorEnabled };
-    }));
+  const handleToggle2FA = async (id: string) => {
+    const user = users.find(u => u.id === id);
+    if (!user) return;
+    setUsers((prev) => prev.map((u) => u.id !== id ? u : { ...u, twoFactorEnabled: !u.twoFactorEnabled }));
+    showToast('info', user.twoFactorEnabled ? '2FA dinonaktifkan' : '2FA diaktifkan', user.nama);
     setOpenMenuId(null);
   };
 
   // ── CRUD: Roles ───────────────────────────────────────────────
-  const handleSaveRole = (data: Omit<Role, 'id' | 'createdAt' | 'userCount' | 'isSystem'>, editId?: string) => {
+  const handleSaveRole = async (data: Omit<Role, 'id' | 'createdAt' | 'userCount' | 'isSystem'>, editId?: string) => {
     if (editId) {
       setRoles((prev) => prev.map((r) => r.id === editId ? { ...r, ...data } : r));
       showToast('success', 'Role diperbarui', data.nama);
+      try {
+        await dataService.saveRole({ id: editId, ...data });
+      } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
     } else {
       const newRole: Role = {
         id: `role_${Date.now()}` as RoleId,
@@ -230,11 +236,14 @@ export default function ManajemenUser() {
       };
       setRoles((prev) => [...prev, newRole]);
       showToast('success', 'Role baru dibuat', data.nama);
+      try {
+        await dataService.saveRole({ id: newRole.id, ...data });
+      } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
     }
     setModalRole(null);
   };
 
-  const handleDeleteRole = (id: string) => {
+  const handleDeleteRole = async (id: string) => {
     const usersWithRole = users.filter((u) => u.roleId === id);
     if (usersWithRole.length > 0) {
       showToast('error', 'Role tidak bisa dihapus', `Masih digunakan oleh ${usersWithRole.length} user`);
@@ -244,6 +253,9 @@ export default function ManajemenUser() {
     setRoles((prev) => prev.filter((r) => r.id !== id));
     showToast('warning', 'Role dihapus', roles.find((r) => r.id === id)?.nama);
     setConfirmDelete(null);
+    try {
+      await dataService.deleteRole(id);
+    } catch { showToast('warning', 'Deleted locally only', 'Failed to sync to database'); }
   };
 
   // ── Export ────────────────────────────────────────────────────

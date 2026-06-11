@@ -87,26 +87,41 @@ export default function OutputPembayaran() {
     dibatalkan: items.filter((i) => i.status === 'dibatalkan').length,
   };
 
-  const handleFinalisasi = (id: string) => {
-    setItems(items.map((i) => (i.id === id ? { ...i, status: 'final' as const, tanggalFinalisasi: new Date().toISOString() } : i)));
+  const handleFinalisasi = async (id: string) => {
+    const now = new Date().toISOString();
+    setItems(items.map((i) => (i.id === id ? { ...i, status: 'final' as const, tanggalFinalisasi: now } : i)));
     showToast('success', 'Pembayaran Difinalisasi', `Pembayaran ${id} telah difinalisasi dan siap disetujui`);
+    try {
+      await dataService.savePembayaran({ id, status: 'final', tanggalFinalisasi: now });
+    } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
-  const handleSetujui = (id: string) => {
-    setItems(items.map((i) => (i.id === id ? { ...i, status: 'disetujui' as const, tanggalPersetujuan: new Date().toISOString() } : i)));
+  const handleSetujui = async (id: string) => {
+    const now = new Date().toISOString();
+    setItems(items.map((i) => (i.id === id ? { ...i, status: 'disetujui' as const, tanggalPersetujuan: now } : i)));
     showToast('success', 'Pembayaran Disetujui', `Pembayaran ${id} telah disetujui oleh Kepala Keuangan`);
+    try {
+      await dataService.savePembayaran({ id, status: 'disetujui', tanggalPersetujuan: now });
+    } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
-  const handleBayar = (id: string) => {
+  const handleBayar = async (id: string) => {
     const noBukti = `TRF/2026/01/${String(items.filter((i) => i.status === 'dibayar').length + 1).padStart(3, '0')}`;
-    setItems(items.map((i) => (i.id === id ? { ...i, status: 'dibayar' as const, tanggalPembayaran: new Date().toISOString(), noBukti } : i)));
+    const now = new Date().toISOString();
+    setItems(items.map((i) => (i.id === id ? { ...i, status: 'dibayar' as const, tanggalPembayaran: now, noBukti } : i)));
     showToast('success', 'Pembayaran Berhasil', `Transfer ${noBukti} telah dilakukan`);
+    try {
+      await dataService.savePembayaran({ id, status: 'dibayar', tanggalPembayaran: now, noBukti });
+    } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
-  const handleBatal = (id: string) => {
+  const handleBatal = async (id: string) => {
     if (confirm('Apakah Anda yakin ingin membatalkan pembayaran ini?')) {
       setItems(items.map((i) => (i.id === id ? { ...i, status: 'dibatalkan' as const } : i)));
       showToast('warning', 'Pembayaran Dibatalkan', `Pembayaran ${id} telah dibatalkan`);
+      try {
+        await dataService.savePembayaran({ id, status: 'dibatalkan' });
+      } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
     }
   };
 

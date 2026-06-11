@@ -399,7 +399,11 @@ const data = {
 
 ### Column names must be camelCase (matching frontend interfaces)
 
-SQLite column names in SELECT queries must produce **camelCase** keys matching the frontend TypeScript interfaces. If the table uses camelCase column names directly (like `kodeIndex`, `namaIndex`), the SELECT can use them directly. If the table uses snake_case, you must alias:
+All API responses must produce **camelCase** keys matching the frontend TypeScript interfaces. The approach differs between SQLite and Supabase PostgreSQL:
+
+#### SQLite (local API bridge)
+
+SQLite column names in SELECT queries can use camelCase directly if the table defines them that way (like `kodeIndex`, `namaIndex`). If the table uses snake_case, you must alias:
 
 ```javascript
 // WRONG — returns snake_case keys the frontend doesn't recognize
@@ -408,6 +412,253 @@ refIndexing: queryAll('SELECT * FROM indexing'),  // returns { kode_index, nama_
 // CORRECT — returns camelCase keys matching frontend Indexing interface
 refIndexing: queryAll('SELECT id, kodeIndex, namaIndex, bobot, kategori, keterangan, aktif FROM indexing'),
 ```
+
+#### Supabase PostgreSQL — CRITICAL: lowercase normalization requires explicit mapping
+
+**PostgreSQL normalizes ALL unquoted identifiers to lowercase.** This means Supabase PostgREST returns lowercase keys even when you created the table with camelCase column names. For example:
+- `jenisPelayanan` column → PostgREST returns `jenispelayanan`
+- `totalJasaMedis` column → returns `totaljasamedis`
+- `statusAktif` column → returns `statusaktif`
+
+**A generic snake_case→camelCase converter DOES NOT WORK** because PostgreSQL merges multi-word camelCase into a single lowercase string without underscores — `totalJasaMedis` becomes `totaljasamedis` (NOT `total_jasa_medis`). You can't reconstruct the original camelCase from `totaljasamedis` without knowing where the word boundaries are.
+
+**Solution: Explicit bidirectional mapping table + transform functions in the API server:**
+
+```javascript
+// Explicit map: lowercase (from Supabase) → camelCase (frontend expects)
+const CAMEL_CASE_MAP = {
+  jenispelayanan: 'jenisPelayanan',
+  jumlahpasien: 'jumlahPasien',
+  nilaipendapatan: 'nilaiPendapatan',
+  tarifjasa: 'tarifJasa',
+  jumlahtindakan: 'jumlahTindakan',
+  totaljasa: 'totalJasa',
+  kodeindex: 'kodeIndex',
+  namaindex: 'namaIndex',
+  totalpendapatan: 'totalPendapatan',
+  totalbeban: 'totalBeban',
+  totaljasamedis: 'totalJasaMedis',
+  totaljasaparamedis: 'totalJasaParamedis',
+  totaljasapenunjang: 'totalJasaPenunjang',
+  bonusprestasi: 'bonusPrestasi',
+  tanggalpengajuan: 'tanggalPengajuan',
+  nostr: 'noStr',
+  nosip: 'noSip',
+  tanggallahir: 'tanggalLahir',
+  tanggalmasuk: 'tanggalMasuk',
+  nohp: 'noHp',
+  statusaktif: 'statusAktif',
+  jasapertindakan: 'jasaPerTindakan',
+  totaltindakan: 'totalTindakan',
+  nakesid: 'nakesId',
+  nakesnama: 'nakesNama',
+  norekening: 'noRekening',
+  jasamedis: 'jasaMedis',
+  jasaparamedis: 'jasaParamedis',
+  jasapenunjang: 'jasaPenunjang',
+  totaljasakotor: 'totalJasaKotor',
+  pajakpph: 'pajakPPh',
+  iuranbpjs: 'iuranBPJS',
+  potonganlain: 'potonganLain',
+  totalpotongan: 'totalPotongan',
+  nettodibayar: 'nettoDibayar',
+  tanggalfinalisasi: 'tanggalFinalisasi',
+  tanggalpersetujuan: 'tanggalPersetujuan',
+  tanggalpembayaran: 'tanggalPembayaran',
+  nobukti: 'noBukti',
+  namarole: 'namaRole',
+  roleid: 'roleId',
+  unitid: 'unitId',
+};
+
+// Reverse map: camelCase → lowercase (for sending data TO Supabase)
+const LOWER_CASE_MAP = {};
+for (const [lc, cc] of Object.entries(CAMEL_CASE_MAP)) {
+  LOWER_CASE_MAP[cc] = lc;
+}
+
+// Transform functions applied to ALL Supabase REST API read/write operations
+function toCamelKey(key) { return CAMEL_CASE_MAP[key] || key; }
+function toLowerKey(key) { return LOWER_CASE_MAP[key] || key; }
+
+function transformRow(row, direction = 'toCamel') {
+  if (!row || typeof row !== 'object') return row;
+  const fn = direction === 'toCamel' ? toCamelKey : toLowerKey;
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[fn(k)] = Array.isArray(v) ? v.map(r => transformRow(r, direction))
+      : (v && typeof v === 'object' ? transformRow(v, direction) : v);
+  }
+  return out;
+}
+
+function transformData(data, direction = 'toCamel') {
+  if (Array.isArray(data)) return data.map(r => transformRow(r, direction));
+  if (data && typeof data === 'object') return transformRow(data, direction);
+  return data;
+}
+```
+
+**Apply transforms at the Supabase helper layer:**
+
+- **Read** (`sbSelect`): `return transformData(data, 'toCamel')` — converts Supabase lowercase keys to camelCase before returning to frontend
+- **Write** (`sbUpsert`, `sbInsert`, `sbUpdate`): convert incoming camelCase body to lowercase first (`transformData(rows, 'toLower')`), then send to Supabase; convert response back to camelCase (`transformData(result, 'toCamel')`)
+- **Select column names**: Use lowercase column names in Supabase REST API `?select=` queries (e.g., `statusaktif` not `statusAktif`), since PostgREST expects lowercase
+
+**Alternative approach (fix at the source):** Recreate Supabase tables with double-quoted column names (e.g., `"jenisPelayanan" TEXT`) so PostgreSQL preserves camelCase. This is cleaner but requires dropping and recreating all tables + re-seeding data. The mapping-table approach is faster and works without touching the database schema.
+
+**How to discover the mapping:** Curl the `/api/export` endpoint and compare the returned lowercase keys against the frontend TypeScript interfaces in `mockData.ts`. Every multi-word property that differs needs an entry in `CAMEL_CASE_MAP`. Single-word keys (like `id`, `nama`, `unit`, `status`) don't need mapping — they're the same in both lowercase and camelCase.
+
+## Null-safe rendering patterns for React + Supabase data
+
+**Critical lesson:** Supabase (and any SQL database) allows `NULL` values in columns. When user-created records have nullable fields that are left empty, the API returns `null` (not `0` or `""`). React components that call string/number methods on these `null` values crash the entire render tree — the page appears blank/invisible with no error shown to the user.
+
+### Specific crash patterns and fixes
+
+| Pattern | Crashes on null | Null-safe fix |
+|---------|----------------|---------------|
+| `n.nama.toLowerCase()` | TypeError: Cannot read properties of null | `(n.nama || '').toLowerCase()` |
+| `n.nama.replace(...)` | TypeError: Cannot read properties of null | `(n.nama || '??').replace(...)` |
+| `rating.toFixed(1)` | TypeError: Cannot read properties of null | `(rating ?? 0).toFixed(1)` |
+| `Math.floor(rating)` | Returns NaN for null → wrong UI | `Math.floor(rating || 0)` |
+| `id.replace(/\D/g, '')` | TypeError: Cannot read properties of null | `(id || '0').replace(/\D/g, '')` |
+| `items.reduce((s, n) => s + n.totalJasa, 0)` | `null + 0 = 0` (safe in JS) but still wrong for formatRupiah | `items.reduce((s, n) => s + (n.totalJasa || 0), 0)` |
+| `formatRupiah(n.totalJasa)` where totalJasa is null | Intl.NumberFormat treats null as 0 → "Rp0" (no crash, but misleading) | `formatRupiah(n.totalJasa || 0)` for explicit |
+
+### The `.toFixed()` crash is the most common and most dangerous
+
+This is the #1 cause of "page doesn't open" when Supabase data has null numeric fields. The crash happens silently — React error boundary catches it but shows nothing, making the page appear completely blank.
+
+```typescript
+// BEFORE — crashes the entire ProfilNakes page when rating is null
+const renderStars = (rating: number) => (
+  <span>{rating.toFixed(1)}</span>  // null.toFixed(1) → TypeError!
+);
+
+// AFTER — null-safe, shows "0.0" for null ratings
+const renderStars = (rating: number | null) => (
+  <span>{(rating ?? 0).toFixed(1)}</span>
+);
+```
+
+### How to systematically null-guard a page component
+
+When a page component renders data from Supabase (or any database):
+
+1. **Audit all property access in JSX** — grep for patterns like `.toLowerCase()`, `.replace()`, `.toFixed()`, `.substring()`, `.includes()` and add `(value || default)` guards.
+2. **Audit all useMemo/useCallback computations** — add `|| 0` for numeric fields in `.reduce()`, `.filter()` predicates.
+3. **Audit function signatures** — change `rating: number` to `rating: number | null` for any parameter that comes from database data.
+4. **Test with null data** — curl `/api/export`, check if any items have null fields, then mentally trace how those null values flow through the component's render logic.
+
+### Supabase data field subset vs TypeScript interface mismatch
+
+Supabase tables typically store only a subset of the fields defined in frontend TypeScript interfaces. For example, `mstUser` in Supabase has `{id, nama, username, email, noHp, roleId, unitId, jabatan, status}` (9 fields) while `UserAccount` interface expects 17 fields (`avatar`, `lastLogin`, `createdAt`, `twoFactorEnabled`, `loginCount`, `isOnline`, etc.).
+
+**Problem:** If you directly set Supabase data into React state typed as `UserAccount[]`, the missing fields become `undefined` — accessing `user.avatar` works (undefined) but `user.twoFactorEnabled` in conditional logic may produce wrong results.
+
+**Fix: Merge Supabase data with default/reference data:**
+
+```typescript
+dataService.exportAllData().then((data) => {
+  if (data.mstUser && data.mstUser.length > 0) {
+    const merged = data.mstUser.map((u: any) => {
+      const defaults = defaultUsers.find(d => d.id === u.id || d.username === u.username);
+      return {
+        id: u.id || 'USR-000',
+        nama: u.nama || '',
+        username: u.username || '',
+        email: u.email || '',
+        noHp: u.noHp || '',
+        roleId: (u.roleId || 'viewer') as RoleId,
+        unit: u.unit || u.unitId || '',
+        jabatan: u.jabatan || '',
+        // Fill missing fields from defaults
+        avatar: u.avatar || u.nama?.substring(0, 2).toUpperCase() || '??',
+        status: (u.status || 'aktif') as UserStatus,
+        lastLogin: u.lastLogin || defaults?.lastLogin || '-',
+        createdAt: u.createdAt || defaults?.createdAt || new Date().toISOString().slice(0, 10),
+        twoFactorEnabled: u.twoFactorEnabled ?? defaults?.twoFactorEnabled ?? false,
+        loginCount: u.loginCount ?? defaults?.loginCount ?? 0,
+        isOnline: u.isOnline ?? defaults?.isOnline ?? false,
+      } as UserAccount;
+    });
+    setUsers(merged);
+  }
+}).catch(() => { setUsers(defaultUsers); setRoles(defaultRoles); });
+```
+
+Key patterns in the merge:
+- **String fields:** `u.field || ''` (empty string default)
+- **Numeric fields:** `u.field ?? defaults?.field ?? 0` (nullish coalescing to preserve `0` as a valid value)
+- **Boolean fields:** `u.field ?? defaults?.field ?? false`
+- **Date fields:** `u.field || defaults?.field || fallbackString`
+- **FK name resolution:** `u.unit || u.unitId || ''` — Supabase stores `unitId` (FK), frontend expects `unit` (display name)
+
+### Common React+Supabase crash bugs
+
+**Bug: `showToast` called without destructuring from `useApp()`**
+
+```typescript
+// WRONG — showToast is undefined → ReferenceError crashes render
+export default function ManajemenUser() {
+  // Missing: const { showToast } = useApp();
+  const handleSave = async () => {
+    showToast('success', 'Saved');  // ReferenceError: showToast is not defined
+  };
+}
+
+// CORRECT
+export default function ManajemenUser() {
+  const { showToast } = useApp();  // Required!
+  ...
+}
+```
+
+**Why this crashes silently:** `showToast` is not a variable in scope, so calling it throws `ReferenceError`. If this happens inside a handler function (not during initial render), the error is caught by the handler's try/catch or React's error handling. But if it happens during render (e.g., in a useMemo or useEffect callback that calls showToast synchronously), it crashes the entire component tree.
+
+**Bug: API response format mismatch — `Object.keys(undefined)` crash**
+
+```typescript
+// WRONG — /stats returns { ok, data: { totalPendapatan, ... } } not { tables, views }
+const loadDatabaseStats = async () => {
+  const response = await fetch(`${apiUrl}/stats`);
+  const data: DatabaseStats = await response.json();
+  setDbStats(data);  // data has no .tables property
+};
+// Later in JSX: Object.keys(dbStats.tables).length → Object.keys(undefined) → TypeError!
+
+// CORRECT — parse the actual response format and adapt
+const loadDatabaseStats = async () => {
+  const result = await response.json();
+  if (result.ok && result.data) {
+    const tables: Record<string, string> = {};
+    for (const [key, val] of Object.entries(result.data)) {
+      if (typeof val === 'number') tables[key] = String(val);
+    }
+    setDbStats({ tables, views: [] });
+  }
+};
+```
+
+**Rule:** Never assume the API response format matches your TypeScript interface. Always validate the actual response structure and adapt it. Type assertions (`as DatabaseStats`) don't provide runtime safety — they only silence the compiler.
+
+## Deployment checklist — always commit ALL fixes before pushing
+
+**Common mistake:** Making fixes to multiple files but only staging/committing some of them. The uncommitted changes don't get built into the Docker image and aren't deployed to HF Spaces.
+
+```bash
+# WRONG — only commits ManajemenUser, leaves ProfilNakes changes uncommitted
+git add src/pages/ManajemenUser.tsx && git commit -m "fix ManajemenUser"
+
+# CORRECT — check git status, stage ALL modified source files before committing
+git status  # See ALL modified files
+git add src/pages/ManajemenUser.tsx src/pages/ProfilNakes.tsx src/pages/NetworkDatabase.tsx
+git commit -m "fix: null-safe rendering + showToast destructuring + stats format"
+npm run build  # Rebuild frontend with ALL fixes
+git push origin main && git push hf main
+```
+
+**Always run `git status` and `git diff` before committing** to verify all intended changes are staged. Missing a file means the deployed version still has the bug.
 
 ### Missing API endpoints cause HTML fallback (not JSON)
 
@@ -434,6 +685,44 @@ When Express serves both API and static frontend from the same server (HF Spaces
 | `/api/pembayaran` | OutputPembayaran | Update pembayaran status |
 
 **Rule:** Every endpoint that exists in `api-bridge/server.js` must also exist in `hf-server/server.js`. If an endpoint is missing, the frontend gets HTML instead of JSON → crash.
+
+### Browser caching stale SPA — "fix deployed but error still appears"
+
+When using `vite-plugin-singlefile`, the entire SPA is bundled into a single `index.html` with all JS/CSS inlined. After deploying a fix, the browser may still serve the **cached old version** — users see the same crash (e.g., `null.toFixed()` TypeError) even though the code is fixed on the server.
+
+**Why this happens:** The single-file SPA has no separate JS filename with a content hash that changes on rebuild. The browser's default caching behavior keeps the old `index.html` (with old inlined JS) because the URL hasn't changed.
+
+**Fix: Add no-cache headers at multiple levels:**
+
+1. **Express server — Cache-Control headers on static files:**
+```javascript
+app.use(express.static(publicDir, {
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  },
+}));
+app.get('*', (_req, res) => {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
+```
+
+2. **HTML meta tags — fallback for proxies that strip HTTP headers:**
+```html
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+```
+
+3. **Tell users to hard-refresh:** After deploying fixes, instruct users to press `Ctrl+Shift+R` (Windows) or `Cmd+Shift+R` (Mac), or open in a new incognito/private window.
+
+**Debugging tip:** To verify whether the deployed version has the fix, check the HF Spaces API endpoint SHA:
+```
+https://huggingface.co/api/spaces/Timsupport/siremunika
+```
+Compare the `lastSyncedCommitSha` against your local `git log --oneline -1`. If they match but the browser still shows the old error, it's definitely a caching issue.
 
 ### Database upgrade handling for existing DB files
 
@@ -462,5 +751,131 @@ function ensureTables() {
   saveDb();
 }
 ```
+
+## HF Spaces deployment: push to both remotes separately
+
+`git push origin main` pushes to GitHub. `git push hf main` pushes to HuggingFace Spaces. These are **two separate git remotes** — pushing to one does NOT push to the other. When making fixes, always push to BOTH:
+
+```bash
+git push origin main && git push hf main
+```
+
+**Common mistake:** After committing a fix, you push to `origin/main` (GitHub) but forget `hf/main`. The HF Spaces stays on the old commit, and users see the old buggy version. The HF API shows `lastSyncedCommitSha` that doesn't match your latest local commit.
+
+**Force rebuild if HF doesn't auto-rebuild:** Sometimes HF Spaces needs a manual restart to trigger Docker rebuild after a new push. Use the HF API:
+
+```bash
+curl -X POST "https://huggingface.co/api/spaces/<username>/<space>/restart" \
+  -H "Authorization: Bearer <hf_token>"
+```
+
+This returns `{"stage":"RUNNING_BUILDING"}` confirming the rebuild is triggered.
+
+**Check deployed commit:** Verify the deployed commit matches your latest push:
+```bash
+curl -s "https://huggingface.co/api/spaces/<username>/<space>" | grep sha
+```
+
+Compare against `git log hf/main --oneline -1`.
+
+## Missing API endpoints: always check dataService calls against server routes
+
+**Common mistake:** The frontend `dataService.ts` calls API endpoints that don't exist on the HF server (`hf-server/server.js`). For example, `dataService.importData()` calls `POST /api/import`, but if that endpoint wasn't added to the server, it returns 404.
+
+**Checklist when adding new frontend features:**
+1. Does `dataService.ts` call the endpoint? → Check `apiFetch('/api/...')` calls
+2. Does `hf-server/server.js` have a matching route handler? → Search for `app.post('/api/...')` etc.
+3. Does the local `api-bridge/server.js` have it too? → Both servers need matching routes
+
+**Import endpoint pattern:** The `POST /api/import` endpoint accepts `{ mode: 'merge'|'replace', data: { pendapatan: [...], nakes: [...], ... } }` and upserts each entity into Supabase:
+
+```javascript
+app.post('/api/import', async (req, res) => {
+  try {
+    const { mode = 'merge', data } = req.body;
+    if (!data) return res.status(400).json({ ok: false, error: 'data required' });
+
+    const tableMap = {
+      pendapatan: 'pendapatan',
+      jasaMedis: 'jasa_medis',
+      refIndexing: 'indexing',
+      hasilKalkulasi: 'hasil_kalkulasi',
+      approval: 'approval',
+      nakes: 'nakes',
+      pembayaran: 'pembayaran',
+      mstUser: 'mst_user',
+      mstRole: 'mst_role',
+    };
+
+    const results = {};
+    for (const [key, table] of Object.entries(tableMap)) {
+      const rows = data[key];
+      if (!rows || !Array.isArray(rows) || rows.length === 0) continue;
+      const payload = transformData(rows, 'toLower');  // camelCase → lowercase for Supabase
+      if (mode === 'merge') {
+        results[key] = await sbUpsert(table, payload);
+      } else {
+        await sbFetch(table, 'DELETE', null, '');
+        results[key] = await sbInsert(table, payload);
+      }
+    }
+    res.json({ ok: true, imported: Object.keys(results).map(k => `${k}: ${results[k]?.length || 0} rows`) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+```
+
+**Key point:** The import endpoint must apply `transformData(rows, 'toLower')` to convert camelCase keys from the frontend into lowercase keys that Supabase expects, just like the individual CRUD endpoints do.
+
+## Reference/lookup data must use mock data as initial state (not empty `[]`)
+
+**Problem:** When a page component uses `.find()` or lookup operations on reference data (e.g., finding a pendapatan record by ID to display details in an approval modal), initializing that state as `useState([])` causes the lookup to always fail on first render — `.find()` on an empty array returns `undefined`, and the detail view shows blank/white/empty content.
+
+**Why this happens:** The `useEffect` data loading is asynchronous. Between the initial render and the Promise resolving, the state arrays are empty. If the user opens a detail modal during this window (or if the API is slow/unavailable), all lookups return `undefined` → `getRelatedDetail()` returns `null` → "Data sumber tidak ditemukan" or a blank modal.
+
+**The same issue affected Profil Nakes before it was fixed** — the page showed a white/blank screen because lookup data was empty.
+
+**Fix: Initialize reference data state with mock data, then override with real API data when available:**
+
+```typescript
+// ❌ WRONG — empty initial state, lookups fail before API responds
+const [dataPendapatan, setDataPendapatan] = useState<Pendapatan[]>([]);
+const [dataJasa, setDataJasa] = useState<JasaMedis[]>([]);
+
+// ✅ CORRECT — mock data as initial state, lookups work immediately
+const [dataPendapatan, setDataPendapatan] = useState<Pendapatan[]>(mockPendapatan);
+const [dataJasa, setDataJasa] = useState<JasaMedis[]>(mockJasa);
+```
+
+**The useEffect fallback is simpler because mock data is already the initial state:**
+
+```typescript
+// ✅ CORRECT — override mock with real data when available; no redundant fallback needed
+useEffect(() => {
+  dataService.getPendapatan()
+    .then((d) => { if (d && d.length > 0) setDataPendapatan(d); })
+    .catch(() => {});  // already using mockPendapatan, no action needed
+}, []);
+```
+
+**vs. the old approach with empty initial state (requires explicit fallback):**
+
+```typescript
+// ❌ OLD — had to explicitly set mock data on catch, but modal was still blank during loading
+useEffect(() => {
+  dataService.getPendapatan()
+    .then((d) => { if (d) setDataPendapatan(d); })
+    .catch(() => setDataPendapatan(mockPendapatan));  // redundant with mock-as-initial-state
+}, []);
+```
+
+**When to use this pattern:**
+- ✅ Use mock-as-initial-state when the state is **reference/lookup data** used by `.find()`, `.filter()` lookups, or detail modals
+- ✅ Use `useState([])` for **primary page data** (the list/table that the page directly displays) — this data arrives quickly via `useEffect` and the page shows a loading state or empty-list message naturally
+
+**Import aliasing gotcha:** When you import mock data with aliases (`import { dataPendapatan as mockPendapatan }`) but later add a state variable with the original name (`const [dataPendapatan, setDataPendapatan] = useState(mockPendapatan)`), any code that still references the original unaliased name (`dataPendapatan.find(...)`) at module scope will throw `ReferenceError: dataPendapatan is not defined`. The fix is either:
+1. Use the alias consistently in the function body, OR
+2. Move the lookup into the component where the state variable shadows the import
+
+**Null-safe access in detail functions:** When building detail/lookup functions that reference API-loaded data, use optional chaining (`d?.id || '-'`) and null-safe helpers (`d?.nilaiPendapatan ? formatRupiah(d.nilaiPendapatan) : '-'`) to prevent crashes when fields are missing from API data (null/undefined from nullable DB columns).
 
 ---

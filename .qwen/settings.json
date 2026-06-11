@@ -12,7 +12,10 @@
       "Bash(echo)",
       "Bash(echo *)",
       "Bash(mkdir *)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(ping *)",
+      "Bash(npx *)",
+      "Bash(xcopy *)"
     ]
   },
   "$version": 4

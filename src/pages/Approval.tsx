@@ -54,57 +54,57 @@ interface ApprovalItemExt extends ApprovalItem {
 }
 
 // ─── Helper: ambil detail data terkait ─────────────────────────
-function getRelatedDetail(item: ApprovalItem) {
+function getRelatedDetail(item: ApprovalItem, allPendapatan: Pendapatan[], allJasa: JasaMedis[], allHasil: HasilKalkulasi[]) {
   if (item.tipe === 'pendapatan') {
-    const d = dataPendapatan.find((p) => p.id === item.referensi);
+    const d = allPendapatan.find((p) => p.id === item.referensi);
     if (!d) return null;
     return {
       rows: [
-        { label: 'ID Transaksi', value: d.id },
-        { label: 'Tanggal', value: formatDateShort(d.tanggal) },
-        { label: 'Unit', value: d.unit },
-        { label: 'Jenis Pelayanan', value: d.jenisPelayanan },
-        { label: 'Jumlah Pasien', value: String(d.jumlahPasien) },
-        { label: 'Nilai Pendapatan', value: formatRupiah(d.nilaiPendapatan), bold: true },
-        { label: 'Operator', value: d.operator },
-        { label: 'Status Data', value: d.status },
+        { label: 'ID Transaksi', value: d?.id || '-' },
+        { label: 'Tanggal', value: d?.tanggal ? formatDateShort(d.tanggal) : '-' },
+        { label: 'Unit', value: d?.unit || '-' },
+        { label: 'Jenis Pelayanan', value: d?.jenisPelayanan || '-' },
+        { label: 'Jumlah Pasien', value: String(d?.jumlahPasien ?? 0) },
+        { label: 'Nilai Pendapatan', value: d?.nilaiPendapatan ? formatRupiah(d.nilaiPendapatan) : '-', bold: true },
+        { label: 'Operator', value: d?.operator || '-' },
+        { label: 'Status Data', value: d?.status || '-' },
       ],
     };
   }
   if (item.tipe === 'jasa') {
-    const d = dataJasa.find((j) => j.id === item.referensi);
+    const d = allJasa.find((j) => j.id === item.referensi);
     if (!d) return null;
     return {
       rows: [
-        { label: 'ID Jasa', value: d.id },
-        { label: 'Periode', value: d.periode },
-        { label: 'Nama Nakes', value: d.nakes },
-        { label: 'Jabatan', value: d.jabatan },
-        { label: 'Unit', value: d.unit },
-        { label: 'Tarif/Tindakan', value: formatRupiah(d.tarifJasa) },
-        { label: 'Jumlah Tindakan', value: String(d.jumlahTindakan) },
-        { label: 'Total Jasa', value: formatRupiah(d.totalJasa), bold: true },
-        { label: 'Status Data', value: d.status },
+        { label: 'ID Jasa', value: d?.id || '-' },
+        { label: 'Periode', value: d?.periode || '-' },
+        { label: 'Nama Nakes', value: d?.nakes || '-' },
+        { label: 'Jabatan', value: d?.jabatan || '-' },
+        { label: 'Unit', value: d?.unit || '-' },
+        { label: 'Tarif/Tindakan', value: d?.tarifJasa ? formatRupiah(d.tarifJasa) : '-' },
+        { label: 'Jumlah Tindakan', value: String(d?.jumlahTindakan ?? 0) },
+        { label: 'Total Jasa', value: d?.totalJasa ? formatRupiah(d.totalJasa) : '-', bold: true },
+        { label: 'Status Data', value: d?.status || '-' },
       ],
     };
   }
   if (item.tipe === 'hasil') {
-    const d = dataHasil.find((h) => h.id === item.referensi);
+    const d = allHasil.find((h) => h.id === item.referensi);
     if (!d) return null;
     return {
       rows: [
-        { label: 'ID Kalkulasi', value: d.id },
-        { label: 'Periode', value: d.periode },
-        { label: 'Unit', value: d.unit },
-        { label: 'Total Pendapatan', value: formatRupiah(d.totalPendapatan) },
-        { label: 'Beban Operasional', value: formatRupiah(d.totalBeban) },
-        { label: 'Jasa Medis', value: formatRupiah(d.totalJasaMedis) },
-        { label: 'Jasa Paramedis', value: formatRupiah(d.totalJasaParamedis) },
-        { label: 'Jasa Penunjang', value: formatRupiah(d.totalJasaPenunjang) },
-        { label: 'Bonus Prestasi', value: formatRupiah(d.bonusPrestasi) },
-        { label: 'Pajak', value: formatRupiah(d.pajak) },
-        { label: 'Netto', value: formatRupiah(d.netto), bold: true },
-        { label: 'Status Data', value: d.status },
+        { label: 'ID Kalkulasi', value: d?.id || '-' },
+        { label: 'Periode', value: d?.periode || '-' },
+        { label: 'Unit', value: d?.unit || '-' },
+        { label: 'Total Pendapatan', value: d?.totalPendapatan ? formatRupiah(d.totalPendapatan) : '-' },
+        { label: 'Beban Operasional', value: d?.totalBeban ? formatRupiah(d.totalBeban) : '-' },
+        { label: 'Jasa Medis', value: d?.totalJasaMedis ? formatRupiah(d.totalJasaMedis) : '-' },
+        { label: 'Jasa Paramedis', value: d?.totalJasaParamedis ? formatRupiah(d.totalJasaParamedis) : '-' },
+        { label: 'Jasa Penunjang', value: d?.totalJasaPenunjang ? formatRupiah(d.totalJasaPenunjang) : '-' },
+        { label: 'Bonus Prestasi', value: d?.bonusPrestasi ? formatRupiah(d.bonusPrestasi) : '-' },
+        { label: 'Pajak', value: d?.pajak ? formatRupiah(d.pajak) : '-' },
+        { label: 'Netto', value: d?.netto ? formatRupiah(d.netto) : '-', bold: true },
+        { label: 'Status Data', value: d?.status || '-' },
       ],
     };
   }
@@ -117,10 +117,26 @@ export default function Approval() {
   const { session, can } = useAuth();
 
   const [items, setItems] = useState<ApprovalItemExt[]>([]);
+  const [dataPendapatan, setDataPendapatan] = useState<Pendapatan[]>(mockPendapatan);
+  const [dataJasa, setDataJasa] = useState<JasaMedis[]>(mockJasa);
+  const [dataHasil, setDataHasil] = useState<HasilKalkulasi[]>(mockHasil);
+
   useEffect(() => {
-    dataService.getApproval().then((data) => {
-      if (data && data.length > 0) setItems(data.map((a: any) => ({ ...a })));
-    }).catch(() => { setItems(dataApproval.map((a) => ({ ...a }))); });
+    dataService.getApproval()
+      .then((data) => { if (data && data.length > 0) setItems(data.map((a: any) => ({ ...a }))); })
+      .catch(() => { setItems(dataApproval.map((a) => ({ ...a }))); });
+
+    dataService.getPendapatan()
+      .then((d) => { if (d && d.length > 0) setDataPendapatan(d); })
+      .catch(() => {});
+
+    dataService.getJasaMedis()
+      .then((d) => { if (d && d.length > 0) setDataJasa(d); })
+      .catch(() => {});
+
+    dataService.getHasilKalkulasi()
+      .then((d) => { if (d && d.length > 0) setDataHasil(d); })
+      .catch(() => {});
   }, []);
   const [search, setSearch]                     = useState('');
   const [filterTipe, setFilterTipe]             = useState('Semua');
@@ -563,7 +579,7 @@ export default function Approval() {
 
               {/* Data terkait dari modul asal */}
               {(() => {
-                const detail = getRelatedDetail(detailItem);
+                const detail = getRelatedDetail(detailItem, dataPendapatan, dataJasa, dataHasil);
                 if (!detail) return (
                   <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4">Data sumber tidak ditemukan</p>
                 );

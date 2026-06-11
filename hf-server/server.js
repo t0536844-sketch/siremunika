@@ -127,7 +127,23 @@ async function sbInsert(table, rows) {
 
 async function sbUpdate(table, id, data) {
   const payload = transformRow(data, 'toLower');
-  const result = await sbFetch(table, 'PATCH', payload, `?id=eq.${encodeURIComponent(id)}`);
+  // Filter out unknown columns to prevent PostgREST 500 errors
+  const cols = {
+    pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
+    jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
+    indexing:    ['id','kodeindex','namaindex','deskripsi','bobot','aktif'],
+    hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','status'],
+    approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
+    nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
+    pembayaran:  ['id','periode','nakesid','nakesnama','unit','jabatan','jasamedis','jasaparamedis','jasapenunjang','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','norekening','tanggalpembayaran','tanggalpersetujuan','tanggalfinalisasi','nobukti'],
+    mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
+    mst_role:    ['id','namarole','deskripsi'],
+  };
+  const allowed = cols[table];
+  const stripped = allowed
+    ? Object.fromEntries(Object.entries(payload).filter(([k]) => allowed.includes(k)))
+    : payload;
+  const result = await sbFetch(table, 'PATCH', stripped, `?id=eq.${encodeURIComponent(id)}`);
   return transformData(result, 'toCamel');
 }
 

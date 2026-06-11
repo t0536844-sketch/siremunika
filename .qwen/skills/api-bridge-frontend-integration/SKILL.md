@@ -878,4 +878,97 @@ useEffect(() => {
 
 **Null-safe access in detail functions:** When building detail/lookup functions that reference API-loaded data, use optional chaining (`d?.id || '-'`) and null-safe helpers (`d?.nilaiPendapatan ? formatRupiah(d.nilaiPendapatan) : '-'`) to prevent crashes when fields are missing from API data (null/undefined from nullable DB columns).
 
+**Error boundary for modal rendering:** When a modal renders data that could have unexpected shapes (mixed mock + API data), wrap it in a React Error Boundary class component. Without an error boundary, any render crash (like rendering `<undefined />` from a failed icon lookup) unmounts the entire page — the user sees a blank white screen with no feedback. The Error Boundary catches the crash and shows a user-friendly message instead:
+
+```typescript
+class DetailErrorBoundary extends Component<{ children: React.ReactNode; onReset: () => void }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) return (
+      <div className="text-center py-8 px-4">
+        <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
+        <p className="text-sm font-semibold">Gagal menampilkan detail</p>
+        <button onClick={() => { this.setState({ hasError: false }); this.props.onReset(); }}>Tutup Modal</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+```
+
+**Null-safe icon/label lookups in modals:** When using Record maps for icons/colors/labels based on a `tipe` field (`tipeIcon[detailItem.tipe]`, `tipeColor[detailItem.tipe]`), always provide a fallback because an unexpected `tipe` value produces `undefined` — rendering `<undefined className="w-5 h-5" />` crashes React:
+
+```typescript
+// ❌ CRASHES if detailItem.tipe is not in tipeIcon
+{(() => { const IC = tipeIcon[detailItem.tipe]; return <IC className="w-5 h-5" />; })()}
+
+// ✅ Null-safe — fallback to a generic icon
+{(() => { const IC = tipeIcon[detailItem.tipe] || FileText; return <IC className="w-5 h-5" />; })()}
+```
+
+## Critical async bug: try/catch does NOT catch un-awaited async rejections
+
+**This is the #1 cause of "data not persisting" bugs in this project.** The pattern `try { someAsyncFunction(); } catch { ... }` **only catches synchronous errors**, NOT async Promise rejections. If `someAsyncFunction()` returns a rejected Promise, the catch block is never executed — the error silently vanishes, and the operation appears to succeed locally but never reaches the database.
+
+**How it manifests:** User clicks "Approve" → toast says "✅ Disetujui" → looks successful in UI → refresh page → status reverted back to "pending" because the database never received the update.
+
+```typescript
+// ❌ WRONG — fire-and-forget, catch never triggers on async rejection
+const executeAction = () => {
+  setItems(prev => prev.map(...));  // optimistic local update
+  showToast('success', '✅ Disetujui');
+  try {
+    dataService.updateApproval({ id, status: 'approved' });  // NOT awaited
+  } catch {
+    showToast('warning', 'Updated locally only');  // NEVER reached on async failure
+  }
+};
+
+// ✅ CORRECT — properly await the async call inside an async function
+const executeAction = () => {
+  setProcessing(true);
+  setTimeout(async () => {  // make the callback async
+    setItems(prev => prev.map(...));
+    showToast('success', '✅ Disetujui');
+    try {
+      await dataService.updateApproval({ id, status: 'approved' });  // AWAITED
+    } catch {
+      showToast('warning', 'Updated locally only');  // Now properly catches async errors
+    }
+    setProcessing(false);
+  }, 800);
+};
+
+// ✅ ALSO CORRECT — make the entire handler async
+const handleRevert = async (id: string) => {
+  setItems(prev => prev.map(...));
+  showToast('info', 'Status dikembalikan');
+  try {
+    await dataService.updateApproval({ id, status: 'pending' });
+  } catch {
+    showToast('warning', 'Updated locally only');
+  }
+};
+```
+
+**Rule: Every `dataService.*` call that modifies data MUST be `await`ed inside an `async` function/callback.** If the containing function uses `setTimeout`, make the callback `async`: `setTimeout(async () => { ... })`.
+
+## Comprehensive CRUD persistence checklist
+
+When a page's operations appear to work in the UI but don't persist to the database after refresh, systematically check EVERY handler:
+
+| Check | What to verify |
+|-------|---------------|
+| 1. Does `dataService` have a method for this operation? | If not, add it (e.g. `savePembayaran`, `saveRole`) |
+| 2. Does the server have an endpoint? | If not, add it to `hf-server/server.js` (e.g. `POST /api/role`, `DELETE /api/role/:id`) |
+| 3. Does the page handler call `await dataService.*Method*()`? | If only `setItems()` with no API call → add the call |
+| 4. Is the `await` inside an `async` function? | `try { asyncFn(); } catch {}` silently fails — must `await` inside `async` |
+| 5. Does the catch block inform the user? | `showToast('warning', 'Updated locally only')` — so they know data isn't in DB |
+
+**Known pages that had local-only operations (fixed):**
+- **OutputPembayaran**: `handleFinalisasi`, `handleSetujui`, `handleBayar`, `handleBatal` — all 4 only did `setItems()`, no API calls. Added `await dataService.savePembayaran(...)` to each.
+- **ManajemenUser**: `handleToggleStatus`, `handleSuspend` — only `setUsers()`. Added `await dataService.saveUser(...)`. Role CRUD (`handleSaveRole`, `handleDeleteRole`) — only `setRoles()`. Added `await dataService.saveRole/deleteRole`.
+- **Approval**: `executeAction` and `handleRevert` — had `dataService.updateApproval()` calls but NOT awaited (fire-and-forget). Added `await` + made callbacks `async`.
+
 ---

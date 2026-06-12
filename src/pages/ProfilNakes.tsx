@@ -60,21 +60,27 @@ const EMPTY_FORM: FormNakes = {
 // ─── Validator ────────────────────────────────────────────────────────────────
 function validateForm(form: FormNakes): FormError {
   const err: FormError = {};
-  if (!form.nip.trim()) err.nip = 'NIP wajib diisi';
-  else if (!/^\d{18}$/.test(form.nip.trim())) err.nip = 'NIP harus 18 digit angka';
-  if (!form.nama.trim()) err.nama = 'Nama lengkap wajib diisi';
-  else if (form.nama.trim().length < 4) err.nama = 'Nama minimal 4 karakter';
+  const nip = form.nip ?? '';
+  const nama = form.nama ?? '';
+  const noStr = form.noStr ?? '';
+  const noHp = form.noHp ?? '';
+  const pendidikan = form.pendidikan ?? '';
+  const email = form.email ?? '';
+  if (!nip.trim()) err.nip = 'NIP wajib diisi';
+  else if (!/^\d{18}$/.test(nip.trim())) err.nip = 'NIP harus 18 digit angka';
+  if (!nama.trim()) err.nama = 'Nama lengkap wajib diisi';
+  else if (nama.trim().length < 4) err.nama = 'Nama minimal 4 karakter';
   if (!form.jabatan) err.jabatan = 'Jabatan wajib dipilih';
   if (!form.unit) err.unit = 'Unit wajib dipilih';
-  if (!form.noStr.trim()) err.noStr = 'No. STR wajib diisi';
+  if (!noStr.trim()) err.noStr = 'No. STR wajib diisi';
   if (!form.tanggalLahir) err.tanggalLahir = 'Tanggal lahir wajib diisi';
   if (!form.tanggalMasuk) err.tanggalMasuk = 'Tanggal masuk wajib diisi';
-  if (!form.pendidikan.trim()) err.pendidikan = 'Pendidikan wajib diisi';
-  if (!form.noHp.trim()) err.noHp = 'Nomor HP wajib diisi';
-  else if (!/^0\d{9,12}$/.test(form.noHp.replace(/[-\s]/g, '')))
+  if (!pendidikan.trim()) err.pendidikan = 'Pendidikan wajib diisi';
+  if (!noHp.trim()) err.noHp = 'Nomor HP wajib diisi';
+  else if (!/^0\d{9,12}$/.test(noHp.replace(/[-\s]/g, '')))
     err.noHp = 'Format HP tidak valid (contoh: 08123456789)';
-  if (!form.email.trim()) err.email = 'Email wajib diisi';
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+  if (!email.trim()) err.email = 'Email wajib diisi';
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     err.email = 'Format email tidak valid';
   if (form.jasaPerTindakan <= 0) err.jasaPerTindakan = 'Tarif jasa harus lebih dari 0';
   if (form.rating < 1 || form.rating > 5) err.rating = 'Rating harus antara 1 – 5';
@@ -207,7 +213,12 @@ export default function ProfilNakes() {
 
   const openEdit = (n: Nakes) => {
     const { id, ...rest } = n;
-    setForm(rest);
+    // Sanitize null values from Supabase to empty strings for form
+    const sanitized: FormNakes = {} as FormNakes;
+    for (const [k, v] of Object.entries(rest)) {
+      sanitized[k as keyof FormNakes] = (v === null || v === undefined ? (typeof EMPTY_FORM[k as keyof FormNakes] === 'string' ? '' : 0) : v) as any;
+    }
+    setForm(sanitized);
     setErrors({});
     setTouched({});
     setActiveNakes(n);
@@ -939,7 +950,7 @@ export default function ProfilNakes() {
             {/* Footer form */}
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between flex-shrink-0">
               {/* Reset form */}
-              <button onClick={() => { setForm(mode === 'edit' && activeNakes ? (({ id, ...r }) => r)(activeNakes) : EMPTY_FORM); setErrors({}); setTouched({}); }} className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition">
+              <button onClick={() => { setForm(mode === 'edit' && activeNakes ? (() => { const { id, ...rest } = activeNakes; const sanitized = {} as FormNakes; for (const [k, v] of Object.entries(rest)) { sanitized[k as keyof FormNakes] = (v === null || v === undefined ? (typeof EMPTY_FORM[k as keyof FormNakes] === 'string' ? '' : 0) : v) as any; } return sanitized; })() : EMPTY_FORM); setErrors({}); setTouched({}); }} className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition">
                 <RotateCcw className="w-3.5 h-3.5" /> Reset Form
               </button>
               <div className="flex gap-2">

@@ -1041,6 +1041,49 @@ async function sbUpsert(table, rows) {
 4. Then, add the `dataService` method in frontend
 5. Then, wire the page handler with optimistic-update + `await`
 
+### Critical: Prefer header must include BOTH values for upsert
+
+The `sbUpsert` function sends a POST with `Prefer: resolution=merge-duplicates` to PostgREST. If you override `Prefer` to ONLY `resolution=merge-duplicates` (removing the default `return=representation` from `sbHeaders`), PostgREST returns an **empty response body** for successful operations. Then `res.json()` tries to parse an empty string → throws `SyntaxError: Unexpected end of JSON input` → Express catches it → returns 500 to frontend.
+
+**This is the #1 cause of "Unexpected end of JSON input" 500 errors on POST/upsert endpoints.**
+
+```javascript
+// WRONG — only resolution=merge-duplicates, no return=representation
+const headers = { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates' };
+// Result: PostgREST returns empty body → res.json() crashes
+
+// CORRECT — both values comma-separated
+const headers = { ...sbHeaders, 'Prefer': 'return=representation,resolution=merge-duplicates' };
+// Result: PostgREST returns the upserted rows → res.json() succeeds
+```
+
+**Why:** When you spread `sbHeaders` (which has `Prefer: 'return=representation'`) and then override with `'Prefer': 'resolution=merge-duplicates'`, the later key wins — replacing `return=representation` entirely. PostgREST needs BOTH values to return data AND handle merge conflicts.
+
+### Critical: Safe JSON parsing for all Supabase responses
+
+PostgREST may return an empty body for various operations (DELETE, PATCH without `return=representation`, etc.). Using `res.json()` directly on empty responses throws `SyntaxError: Unexpected end of JSON input`, which crashes the Express handler and returns 500 to the frontend.
+
+**Fix: Always use `res.text()` before `JSON.parse()`:**
+
+```javascript
+// WRONG — res.json() crashes on empty body
+async function sbFetch(table, method, body, query) {
+  ...
+  return res.json();  // Throws "Unexpected end of JSON input" if body is empty
+}
+
+// CORRECT — safe parse with empty fallback
+async function sbFetch(table, method, body, query) {
+  ...
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+```
+
+**Apply this pattern to ALL Supabase helper functions:** `sbFetch`, `sbSelect` (which calls `sbFetch`), `sbInsert`, `sbUpdate`, `sbUpsert`, `sbDelete` — any function that processes PostgREST responses.
+
+**Why:** Even with `return=representation` in the Prefer header, some operations may return empty bodies (e.g., DELETE on a non-existent row, PATCH that doesn't match any rows). The safe pattern prevents the Express handler from crashing and returning 500 to the frontend.
+
 ## Comprehensive CRUD persistence checklist
 
 When a page's operations appear to work in the UI but don't persist to the database after refresh, systematically check EVERY handler:
@@ -1052,6 +1095,9 @@ When a page's operations appear to work in the UI but don't persist to the datab
 | 3. Does the page handler call `await dataService.*Method*()`? | If only `setItems()` with no API call → add the call |
 | 4. Is the `await` inside an `async` function? | `try { asyncFn(); } catch {}` silently fails — must `await` inside `async` |
 | 5. Does the catch block inform the user? | `showToast('warning', 'Updated locally only')` — so they know data isn't in DB |
+| 6. Does the payload contain mock-only fields? | Check `TABLE_COLUMNS` — fields like `approvedBy`, `twoFactorEnabled` not in Supabase will cause 500 unless stripped |
+| 7. Is the `Prefer` header correct for upsert? | Must be `return=representation,resolution=merge-duplicates` — not just `resolution=merge-duplicates` |
+| 8. Is `res.json()` safe on empty responses? | Use `res.text()` → `JSON.parse()` pattern — `res.json()` crashes on empty body |
 
 **Known pages that had local-only operations (fixed):**
 - **OutputPembayaran**: `handleFinalisasi`, `handleSetujui`, `handleBayar`, `handleBatal` — all 4 only did `setItems()`, no API calls. Added `await dataService.savePembayaran(...)` to each.

@@ -921,11 +921,11 @@ export default function ProfilNakes() {
                     <FormField label="Tarif Jasa per Tindakan (Rp)" required error={errors.jasaPerTindakan}>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">Rp</span>
-                        <input type="number" value={form.jasaPerTindakan || ''} onChange={(e) => setField('jasaPerTindakan', Number(e.target.value))} onBlur={() => touch('jasaPerTindakan')} placeholder="250000" className={`${inputCls(errors.jasaPerTindakan)} pl-9`} />
+                        <input type="number" value={form.jasaPerTindakan || ''} onChange={(e) => { const val = Number(e.target.value); setField('jasaPerTindakan', val); setField('totalJasa', val * form.totalTindakan); }} onBlur={() => touch('jasaPerTindakan')} placeholder="250000" className={`${inputCls(errors.jasaPerTindakan)} pl-9`} />
                       </div>
                     </FormField>
                     <FormField label="Total Tindakan (periode ini)">
-                      <input type="number" value={form.totalTindakan || ''} onChange={(e) => setField('totalTindakan', Number(e.target.value))} placeholder="0" className={inputCls()} />
+                      <input type="number" value={form.totalTindakan || ''} onChange={(e) => { const val = Number(e.target.value); setField('totalTindakan', val); setField('totalJasa', form.jasaPerTindakan * val); }} placeholder="0" className={inputCls()} />
                     </FormField>
                     <FormField label="Rating Kinerja (1–5)" error={errors.rating}>
                       <div>

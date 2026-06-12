@@ -1104,4 +1104,90 @@ When a page's operations appear to work in the UI but don't persist to the datab
 - **ManajemenUser**: `handleToggleStatus`, `handleSuspend` — only `setUsers()`. Added `await dataService.saveUser(...)`. Role CRUD (`handleSaveRole`, `handleDeleteRole`) — only `setRoles()`. Added `await dataService.saveRole/deleteRole`.
 - **Approval**: `executeAction` and `handleRevert` — had `dataService.updateApproval()` calls but NOT awaited (fire-and-forget). Added `await` + made callbacks `async`.
 
+## Incomplete save payloads — form fields omitted from API request
+
+**This is a systematic bug pattern** that causes "data not saved" even when the API call succeeds. The frontend form has fields (e.g., `jasaPerTindakan`, `totalTindakan`, `totalJasa`, `rating` in ProfilNakes) that the user fills in, but the `savedItem` object constructed for the API call **omits those fields**. The local state update (`setItems`) includes them (via `{ ...form }`), but the API payload only includes a subset.
+
+**How it manifests:** User fills in jasaPerTindakan = 450000 → save succeeds → refresh → jasaPerTindakan shows null/0 because Supabase never received it.
+
+**Root cause:** The developer manually constructs `savedItem` with a subset of form fields instead of sending the full form. This often happens because some fields were added later to the form/Supabase table but the `savedItem` wasn't updated.
+
+```typescript
+// ❌ WRONG — savedItem omits fields that exist in the form AND Supabase
+const savedItem = {
+  nip: form.nip,
+  nama: form.nama,
+  jabatan: form.jabatan,
+  // ... 10 more fields ...
+  statusAktif: form.statusAktif,
+  // MISSING: jasaPerTindakan, totalTindakan, totalJasa, rating
+};
+await dataService.saveNakes(savedItem);  // API succeeds but 4 fields never reach DB
+
+// ✅ CORRECT — include ALL fields that exist in both the form and the database
+const savedItem = {
+  nip: form.nip,
+  nama: form.nama,
+  jabatan: form.jabatan,
+  // ... all fields ...
+  statusAktif: form.statusAktif,
+  jasaPerTindakan: form.jasaPerTindakan,
+  totalTindakan: form.totalTindakan,
+  totalJasa: form.totalJasa,
+  rating: form.rating,
+};
+await dataService.saveNakes(savedItem);
+```
+
+**Rule: The `savedItem` sent to the API must include EVERY field that exists in both the form state AND the Supabase table.** Fields that only exist in mock data (not in Supabase) will be stripped by `stripPayload`/`TABLE_COLUMNS`, so it's safe to include them. But fields that DO exist in Supabase MUST be in `savedItem` — otherwise they're silently lost.
+
+**How to verify:** After any save operation, check the Supabase data via `/api/export` or the Supabase dashboard. Compare the stored data against what the user entered. Any field showing null/default values that the user filled in indicates an incomplete payload.
+
+**Prevention:** When adding a new field to a form, ALWAYS add it to both:
+1. The `savedItem` object in the save handler
+2. The `TABLE_COLUMNS` array in server.js (if it's a new Supabase column)
+
+## Null-safe form validation and initialization for Supabase data
+
+**Pattern:** When editing a record loaded from Supabase, nullable columns return `null` (not `""` or `0`). Calling `.trim()` on a null string field crashes with `TypeError: Cannot read properties of null (reading 'trim')`.
+
+**How it manifests:** User clicks "Edit" on an existing nakes record → form loads with `noStr: null` from Supabase → user tabs out of a field → `onBlur` triggers validation → `form.noStr.trim()` → TypeError → page crashes or validation never completes.
+
+```typescript
+// ❌ WRONG — crashes on null values from Supabase
+function validateForm(form: FormNakes): FormError {
+  if (!form.noStr.trim()) err.noStr = 'No. STR wajib diisi';  // null.trim() → TypeError!
+}
+
+// ✅ CORRECT — null-safe coalescing before string methods
+function validateForm(form: FormNakes): FormError {
+  const noStr = form.noStr ?? '';
+  if (!noStr.trim()) err.noStr = 'No. STR wajib diisi';
+}
+```
+
+**Also sanitize on form initialization (openEdit):**
+
+```typescript
+// ❌ WRONG — raw Supabase data has null values that crash validation
+const openEdit = (n: Nakes) => {
+  const { id, ...rest } = n;
+  setForm(rest);  // rest has null fields → .trim() crashes on blur
+};
+
+// ✅ CORRECT — sanitize nulls to empty strings/0 before setting form
+const openEdit = (n: Nakes) => {
+  const { id, ...rest } = n;
+  const sanitized: FormNakes = {} as FormNakes;
+  for (const [k, v] of Object.entries(rest)) {
+    sanitized[k as keyof FormNakes] = (v === null || v === undefined
+      ? (typeof EMPTY_FORM[k as keyof FormNakes] === 'string' ? '' : 0)
+      : v) as any;
+  }
+  setForm(sanitized);
+};
+```
+
+**Rule: Any page that loads data from Supabase into a form must sanitize null values before setting form state.** String fields → `''`, numeric fields → `0`, boolean fields → `false`. The `EMPTY_FORM` constant provides the correct default type for each field.
+
 ---

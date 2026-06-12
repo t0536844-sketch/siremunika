@@ -379,6 +379,108 @@ On HF Spaces, `window.location.port` is empty (HTTPS default port 443) or the HF
 - **HF Spaces README colorFrom/colorTo validation**: Only `red, yellow, green, blue, indigo, purple, pink, gray` are valid. Other color names cause push rejection.
 - **HF Spaces merge conflicts on first push**: Use `--allow-unrelated-histories` and resolve README.md conflict keeping your project's content.
 
+## PostgREST-specific pitfalls (Supabase backend)
+
+### Unknown columns in write payloads → 500 error
+
+**Critical:** PostgREST rejects any column that doesn't exist in the actual Supabase table schema. The frontend sends fields from mock data that don't exist in the real database (e.g., `approvedBy`, `approvedAt`, `rejectedBy`, `rejectedAt`, `alasanTolak` for approval; mock-only fields for other tables). This causes a **500 Internal Server Error** that's hard to diagnose because the Express handler catches it generically.
+
+**Fix:** Strip unknown columns in ALL Supabase write operations (`sbInsert`, `sbUpdate`, `sbUpsert`). Use a `TABLE_COLUMNS` map + `stripPayload()` helper defined BEFORE the Supabase helper functions (since `const` isn't hoisted):
+
+```javascript
+const TABLE_COLUMNS = {
+  pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
+  jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
+  nakes:      ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
+  // ... other tables
+};
+
+function stripPayload(payload, table) {
+  const allowed = TABLE_COLUMNS[table];
+  if (!allowed) return payload;
+  if (Array.isArray(payload)) return payload.map(row => {
+    const out = {};
+    for (const [k, v] of Object.entries(row)) { if (allowed.includes(k)) out[k] = v; }
+    return out;
+  });
+  const out = {};
+  for (const [k, v] of Object.entries(payload)) { if (allowed.includes(k)) out[k] = v; }
+  return out;
+}
+```
+
+**Apply in every write function:**
+```javascript
+async function sbUpsert(table, rows) {
+  const payload = transformData(rows, 'toLower');
+  const stripped = stripPayload(payload, table);  // <-- MUST strip before sending
+  // ...
+}
+async function sbUpdate(table, id, data) {
+  const payload = transformRow(data, 'toLower');
+  const stripped = stripPayload(payload, table);  // <-- MUST strip before sending
+  // ...
+}
+```
+
+**How to maintain TABLE_COLUMNS:** When adding columns to a Supabase table, update `TABLE_COLUMNS` immediately. When the frontend adds new fields that should persist, ensure they're in both `CAMEL_CASE_MAP` AND `TABLE_COLUMNS`. Keep `TABLE_COLUMNS` accurate by checking the actual Supabase table schema via the REST API or dashboard.
+
+### Upsert Prefer header must include `return=representation`
+
+**Bug pattern:** `sbUpsert` with `Prefer: resolution=merge-duplicates` (without `return=representation`) causes PostgREST to return an **empty response body** on success. Then `res.json()` crashes with `"Unexpected end of JSON input"` — this propagates as a 500 error to the frontend.
+
+**Fix:**
+```javascript
+const headers = { ...sbHeaders, 'Prefer': 'return=representation,resolution=merge-duplicates' };
+```
+
+Both values must be present, comma-separated. The `sbHeaders` already has `'Prefer': 'return=representation'`, but spreading and overriding replaces it entirely. You must explicitly combine them.
+
+### Empty response body safety
+
+PostgREST returns empty bodies for some operations (DELETE without `return=representation`, PATCH with no matching rows). Calling `res.json()` on an empty body throws `"Unexpected end of JSON input"`.
+
+**Fix: Use `res.text()` then parse conditionally:**
+```javascript
+const text = await res.text();
+return text ? transformData(JSON.parse(text), 'toCamel') : [];
+```
+
+Apply this pattern in `sbFetch`, `sbUpsert`, `sbUpdate`, and any other function that parses Supabase responses.
+
+### Async try/catch doesn't catch un-awaited promise rejection
+
+**Bug pattern:** Approval approve/reject handlers used `try { dataService.updateApproval(...) } catch { ... }` without `await`. The `dataService.updateApproval()` returns a Promise, and `try/catch` only catches synchronous errors — the async rejection silently disappears, meaning the catch block never fires even when the API returns 500.
+
+**Fix:** Always `await` async calls inside try/catch:
+```javascript
+// WRONG — promise rejection is never caught
+try { dataService.updateApproval(payload); } catch { showToast('warning', 'Local only'); }
+
+// CORRECT — properly catches async errors
+try { await dataService.updateApproval(payload); } catch { showToast('warning', 'Local only'); }
+```
+
+Also ensure the handler function itself is `async` — non-async functions can't use `await`.
+
+### Computed fields must be calculated at save time
+
+**Bug pattern:** Fields like `totalJasa` that are derived from other fields (`jasaPerTindakan * totalTindakan`) may not be updated in the form state if the user doesn't change the dependent input fields. For example, editing an existing record where `totalJasa=0` — if the user doesn't re-type the tarif/tindakan, the onChange handler never fires and `form.totalJasa` stays 0.
+
+**Fix:** Compute derived fields at save time, not from form state:
+```javascript
+const savedItem = {
+  jasaPerTindakan: form.jasaPerTindakan,
+  totalTindakan: form.totalTindakan,
+  totalJasa: form.jasaPerTindakan * form.totalTindakan,  // computed, not form.totalJasa
+};
+```
+
+Also update the local state with the computed value for consistency:
+```javascript
+setItems(items.map(n => n.id === id ? { ...n, ...form, totalJasa: form.jasaPerTindakan * form.totalTindakan } : n));
+```
+
 ## API response format must match between local and HF servers
 
 The HF server (`hf-server/server.js`) and local API bridge (`api-bridge/server.js`) must return **identical response structures** from `/api/export`. If keys or column names differ, the frontend crashes with `TypeError: Cannot convert undefined or null to object` because `Object.keys()` receives null/undefined when expected keys are missing.

@@ -271,6 +271,10 @@ export default function ProfilNakes() {
           noHp: form.noHp,
           email: form.email,
           statusAktif: form.statusAktif,
+          jasaPerTindakan: form.jasaPerTindakan,
+          totalTindakan: form.totalTindakan,
+          totalJasa: form.totalJasa,
+          rating: form.rating,
         };
         await dataService.saveNakes(savedItem);
         showToast('success', 'saved to database', `${form.nama} telah terdaftar (${newId})`);
@@ -290,6 +294,10 @@ export default function ProfilNakes() {
           noHp: form.noHp,
           email: form.email,
           statusAktif: form.statusAktif,
+          jasaPerTindakan: form.jasaPerTindakan,
+          totalTindakan: form.totalTindakan,
+          totalJasa: form.totalJasa,
+          rating: form.rating,
         };
         await dataService.saveNakes(savedItem);
         showToast('success', 'saved to database', `Profil ${form.nama} telah disimpan`);

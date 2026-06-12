@@ -273,13 +273,13 @@ export default function ProfilNakes() {
           statusAktif: form.statusAktif,
           jasaPerTindakan: form.jasaPerTindakan,
           totalTindakan: form.totalTindakan,
-          totalJasa: form.totalJasa,
+          totalJasa: form.jasaPerTindakan * form.totalTindakan,
           rating: form.rating,
         };
         await dataService.saveNakes(savedItem);
         showToast('success', 'saved to database', `${form.nama} telah terdaftar (${newId})`);
       } else if (mode === 'edit' && activeNakes) {
-        setItems(items.map((n) => (n.id === activeNakes.id ? { id: n.id, ...form } : n)));
+        setItems(items.map((n) => (n.id === activeNakes.id ? { id: n.id, ...form, totalJasa: form.jasaPerTindakan * form.totalTindakan } : n)));
         const savedItem = {
           id: activeNakes.id,
           nip: form.nip,
@@ -296,7 +296,7 @@ export default function ProfilNakes() {
           statusAktif: form.statusAktif,
           jasaPerTindakan: form.jasaPerTindakan,
           totalTindakan: form.totalTindakan,
-          totalJasa: form.totalJasa,
+          totalJasa: form.jasaPerTindakan * form.totalTindakan,
           rating: form.rating,
         };
         await dataService.saveNakes(savedItem);

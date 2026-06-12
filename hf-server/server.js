@@ -67,6 +67,33 @@ const CAMEL_CASE_MAP = {
   unitid: 'unitId',
 };
 
+// ── Valid column sets per Supabase table ─────────────────────
+// PostgREST rejects unknown columns — strip fields not in the table schema
+const TABLE_COLUMNS = {
+  pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
+  jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
+  indexing:    ['id','kodeindex','namaindex','deskripsi','bobot','aktif'],
+  hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','status'],
+  approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
+  nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
+  pembayaran:  ['id','periode','nakesid','nakesnama','unit','jabatan','jasamedis','jasaparamedis','jasapenunjang','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','norekening','tanggalpembayaran','tanggalpersetujuan','tanggalfinalisasi','nobukti'],
+  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
+  mst_role:    ['id','namarole','deskripsi'],
+};
+
+function stripPayload(payload, table) {
+  const allowed = TABLE_COLUMNS[table];
+  if (!allowed) return payload;
+  if (Array.isArray(payload)) return payload.map(row => {
+    const out = {};
+    for (const [k, v] of Object.entries(row)) { if (allowed.includes(k)) out[k] = v; }
+    return out;
+  });
+  const out = {};
+  for (const [k, v] of Object.entries(payload)) { if (allowed.includes(k)) out[k] = v; }
+  return out;
+}
+
 // Reverse map: camelCase → lowercase (for sending data TO Supabase)
 const LOWER_CASE_MAP = {};
 for (const [lc, cc] of Object.entries(CAMEL_CASE_MAP)) {
@@ -121,28 +148,14 @@ async function sbSelect(table, select = '*', query = '') {
 
 async function sbInsert(table, rows) {
   const payload = transformData(rows, 'toLower');
-  const data = await sbFetch(table, 'POST', payload);
+  const stripped = stripPayload(payload, table);
+  const data = await sbFetch(table, 'POST', stripped);
   return transformData(data, 'toCamel');
 }
 
 async function sbUpdate(table, id, data) {
   const payload = transformRow(data, 'toLower');
-  // Filter out unknown columns to prevent PostgREST 500 errors
-  const cols = {
-    pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
-    jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
-    indexing:    ['id','kodeindex','namaindex','deskripsi','bobot','aktif'],
-    hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','status'],
-    approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
-    nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
-    pembayaran:  ['id','periode','nakesid','nakesnama','unit','jabatan','jasamedis','jasaparamedis','jasapenunjang','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','norekening','tanggalpembayaran','tanggalpersetujuan','tanggalfinalisasi','nobukti'],
-    mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
-    mst_role:    ['id','namarole','deskripsi'],
-  };
-  const allowed = cols[table];
-  const stripped = allowed
-    ? Object.fromEntries(Object.entries(payload).filter(([k]) => allowed.includes(k)))
-    : payload;
+  const stripped = stripPayload(payload, table);
   const result = await sbFetch(table, 'PATCH', stripped, `?id=eq.${encodeURIComponent(id)}`);
   return transformData(result, 'toCamel');
 }
@@ -153,9 +166,10 @@ async function sbDelete(table, id) {
 
 async function sbUpsert(table, rows) {
   const payload = transformData(rows, 'toLower');
+  const stripped = stripPayload(payload, table);
   const headers = { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates' };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method: 'POST', headers, body: JSON.stringify(payload),
+    method: 'POST', headers, body: JSON.stringify(stripped),
   });
   if (!res.ok) throw new Error(`Supabase upsert ${table}: ${res.status} ${await res.text()}`);
   const data = await res.json();
@@ -294,30 +308,6 @@ app.delete('/api/indexing/:id', async (req, res) => {
 
 // ── Import data (upsert all tables) ────────────────────────────
 // ── Valid column sets per Supabase table ─────────────────────
-// PostgREST rejects unknown columns — strip fields not in the table schema
-const TABLE_COLUMNS = {
-  pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
-  jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
-  indexing:    ['id','kodeindex','namaindex','deskripsi','bobot','aktif'],
-  hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','status'],
-  approval:    ['id','referensi','tipe','pengaju','status','catatan','timestamp','tanggalpengajuan'],
-  nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
-  pembayaran:  ['id','periode','nakesid','nakesnama','unit','jabatan','jasamedis','jasaparamedis','jasapenunjang','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','norekening','tanggalpembayaran','tanggalpersetujuan','tanggalfinalisasi','nobukti'],
-  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
-  mst_role:    ['id','namarole','deskripsi'],
-};
-
-function stripUnknownCols(rows, allowedCols) {
-  const allowed = new Set(allowedCols);
-  return rows.map(row => {
-    const out = {};
-    for (const [k, v] of Object.entries(row)) {
-      if (allowed.has(k)) out[k] = v;
-    }
-    return out;
-  });
-}
-
 app.post('/api/import', async (req, res) => {
   try {
     const { mode = 'merge', data } = req.body;
@@ -344,7 +334,7 @@ app.post('/api/import', async (req, res) => {
         // 1) camelCase → lowercase keys
         let payload = transformData(rows, 'toLower');
         // 2) Strip columns unknown to Supabase
-        payload = stripUnknownCols(payload, TABLE_COLUMNS[table] || []);
+        payload = stripPayload(payload, table);
         // 3) Upsert or replace
         let result;
         if (mode === 'merge') {

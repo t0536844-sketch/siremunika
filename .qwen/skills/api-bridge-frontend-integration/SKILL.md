@@ -954,6 +954,93 @@ const handleRevert = async (id: string) => {
 
 **Rule: Every `dataService.*` call that modifies data MUST be `await`ed inside an `async` function/callback.** If the containing function uses `setTimeout`, make the callback `async`: `setTimeout(async () => { ... })`.
 
+## PostgREST 500 errors: unknown columns in write payloads
+
+**This is the #1 cause of 500 Internal Server Error when saving/updating data to Supabase.** The frontend TypeScript interfaces contain mock-only fields (like `approvedBy`, `approvedAt`, `rejectedBy`, `rejectedAt`, `alasanTolak` for Approval, or `twoFactorEnabled`, `loginCount`, `isOnline` for Users) that **do not exist as columns in the Supabase table schema**. When these fields are included in PATCH/POST payloads, PostgREST rejects them with a 400/500 error.
+
+**How it manifests:** User clicks "Approve" → toast says success → but console shows `POST /api/approval 500 (Internal Server Error)`. The Express handler catches the PostgREST error and returns 500 to the frontend. The optimistic local update succeeds, but the database never receives the change.
+
+**Root cause trace:**
+1. Frontend sends `{ id, status: 'approved', approvedBy: 'Admin', approvedAt: '2026-...' }` to `POST /api/approval`
+2. Express handler calls `sbUpdate('approval', id, data)` → `transformRow(data, 'toLower')`
+3. `transformRow` converts `approvedBy` → stays `approvedBy` (NOT in LOWER_CASE_MAP, no transformation needed)
+4. PostgREST PATCH to `approval` table includes column `approvedby` → table doesn't have this column → 400/500 error
+5. Express catches error → returns `{ ok: false, error: "Supabase PATCH approval: 400 ..." }` → frontend sees 500
+
+**Fix: Strip unknown columns from ALL Supabase write operations.** Define a `TABLE_COLUMNS` map (listing only columns that actually exist in each Supabase table) and a `stripPayload()` helper. Apply it to `sbInsert`, `sbUpdate`, and `sbUpsert`:
+
+```javascript
+// ── Valid column sets per Supabase table ─────────────────────
+const TABLE_COLUMNS = {
+  pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
+  jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
+  indexing:    ['id','kodeindex','namaindex','deskripsi','bobot','aktif'],
+  hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','status'],
+  approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
+  nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
+  pembayaran:  ['id','periode','nakesid','nakesnama','unit','jabatan','jasamedis','jasaparamedis','jasapenunjang','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','norekening','tanggalpembayaran','tanggalpersetujuan','tanggalfinalisasi','nobukti'],
+  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
+  mst_role:    ['id','namarole','deskripsi'],
+};
+
+function stripPayload(payload, table) {
+  const allowed = TABLE_COLUMNS[table];
+  if (!allowed) return payload;
+  if (Array.isArray(payload)) return payload.map(row => {
+    const out = {};
+    for (const [k, v] of Object.entries(row)) { if (allowed.includes(k)) out[k] = v; }
+    return out;
+  });
+  const out = {};
+  for (const [k, v] of Object.entries(payload)) { if (allowed.includes(k)) out[k] = v; }
+  return out;
+}
+
+// Apply to ALL write functions:
+async function sbInsert(table, rows) {
+  const payload = transformData(rows, 'toLower');
+  const stripped = stripPayload(payload, table);  // ← strip unknown columns
+  const data = await sbFetch(table, 'POST', stripped);
+  return transformData(data, 'toCamel');
+}
+
+async function sbUpdate(table, id, data) {
+  const payload = transformRow(data, 'toLower');
+  const stripped = stripPayload(payload, table);  // ← strip unknown columns
+  const result = await sbFetch(table, 'PATCH', stripped, `?id=eq.${encodeURIComponent(id)}`);
+  return transformData(result, 'toCamel');
+}
+
+async function sbUpsert(table, rows) {
+  const payload = transformData(rows, 'toLower');
+  const stripped = stripPayload(payload, table);  // ← strip unknown columns
+  const headers = { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates' };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers, body: JSON.stringify(stripped),
+  });
+  ...
+}
+```
+
+**Key rules for `TABLE_COLUMNS`:**
+- **Must be defined BEFORE `sbInsert`/`sbUpdate`/`sbUpsert`** — since these are `async function` declarations (not `const`), they're hoisted, but `TABLE_COLUMNS` is `const` and NOT hoisted. Place `TABLE_COLUMNS` at the top of server.js (after CAMEL_CASE_MAP) so it's always available.
+- **Must list ALL columns that exist in the Supabase table** — not just the ones you want to update. If you miss a column, it will be stripped from INSERT payloads and the row won't have that column value.
+- **Must NOT include columns that don't exist** — mock-only fields like `approvedBy`, `approvedAt`, `rejectedBy`, `rejectedAt`, `alasanTolak`, `timestamp` (for approval), `twoFactorEnabled`, `avatar`, `loginCount` (for users) must NOT be listed. These are frontend-only fields that don't map to real database columns.
+- **Must be updated when Supabase schema changes** — if you add a new column to a table (e.g., adding `nilai` and `level` to `approval`), you must update `TABLE_COLUMNS` to include them, otherwise they'll be stripped from payloads.
+- **Column names must be lowercase** — matching the actual Supabase/PostgreSQL column names (not camelCase). The `stripPayload` function operates on the payload AFTER `transformRow(data, 'toLower')` has been applied, so all keys are already lowercase.
+
+**How to discover which columns exist in a Supabase table:**
+1. Query the `/api/export` endpoint and look at the keys returned for each entity
+2. Or use Supabase dashboard: https://supabase.com/dashboard/project/npasitielsksoksctqbv/editor
+3. Compare returned keys against `TABLE_COLUMNS` — any key present in API response but missing from `TABLE_COLUMNS` needs to be added; any key in `TABLE_COLUMNS` but NOT in API response should be removed
+
+**When adding a new CRUD endpoint for a new entity:**
+1. First, create the Supabase table with the needed columns
+2. Then, add the table name + column list to `TABLE_COLUMNS` in server.js
+3. Then, add the Express endpoint (POST/DELETE/PATCH)
+4. Then, add the `dataService` method in frontend
+5. Then, wire the page handler with optimistic-update + `await`
+
 ## Comprehensive CRUD persistence checklist
 
 When a page's operations appear to work in the UI but don't persist to the database after refresh, systematically check EVERY handler:

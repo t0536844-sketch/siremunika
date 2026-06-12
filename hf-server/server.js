@@ -138,7 +138,8 @@ async function sbFetch(table, method = 'GET', body = null, query = '') {
   if (method !== 'GET') opts.headers['Prefer'] = 'return=representation';
   const res = await fetch(url, opts);
   if (!res.ok) throw new Error(`Supabase ${method} ${table}: ${res.status} ${await res.text()}`);
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
 }
 
 async function sbSelect(table, select = '*', query = '') {
@@ -167,13 +168,13 @@ async function sbDelete(table, id) {
 async function sbUpsert(table, rows) {
   const payload = transformData(rows, 'toLower');
   const stripped = stripPayload(payload, table);
-  const headers = { ...sbHeaders, 'Prefer': 'resolution=merge-duplicates' };
+  const headers = { ...sbHeaders, 'Prefer': 'return=representation,resolution=merge-duplicates' };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST', headers, body: JSON.stringify(stripped),
   });
   if (!res.ok) throw new Error(`Supabase upsert ${table}: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  return transformData(data, 'toCamel');
+  const text = await res.text();
+  return text ? transformData(JSON.parse(text), 'toCamel') : [];
 }
 
 // ── Express app ─────────────────────────────────────────────────

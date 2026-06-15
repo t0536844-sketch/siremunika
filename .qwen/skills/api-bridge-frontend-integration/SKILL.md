@@ -175,16 +175,24 @@ To make the app accessible from other devices on the network (not just localhost
 - **Vite dev server**: `server: { host: '0.0.0.0', port: 5173 }` in `vite.config.ts`.
 
 ### Dynamic API URL routing
-The frontend must determine whether it's running locally (separate API server on port 3100) or on a cloud platform (API served from the same origin). Use `window.location.port` to detect the environment:
+The frontend must determine whether it's running locally (separate API server on port 7860) or on a cloud platform (API served from the same origin). Use `window.location.port` to detect the environment:
 
 ```typescript
-const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') || 
-  (window.location.port === '5173' || window.location.port === '5174' 
-    ? `http://${window.location.hostname}:3100`  // Local dev: separate API server
+const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') ||
+  (window.location.port === '5173' || window.location.port === '5174'
+    ? `http://${window.location.hostname}:7860`  // Local dev: Express+Supabase on 7860
     : '');  // Cloud/production: same server, relative URLs
 ```
 
-**Why:** On localhost, the frontend runs on port 5173/5174 and the API runs on port 3100 — absolute URL needed. On HuggingFace Spaces (or any production deployment where Express serves both API and frontend from the same port), relative URLs work because the API shares the same origin. Using `window.location.hostname` instead of `'localhost'` ensures the URL resolves correctly from any device on the network.
+**Why:** On localhost, the frontend runs on port 5173/5174 and the API runs on port 7860 — absolute URL needed. On HuggingFace Spaces (or any production deployment where Express serves both API and frontend from the same port), relative URLs work because the API shares the same origin. Using `window.location.hostname` instead of `'localhost'` ensures the URL resolves correctly from any device on the network.
+
+**Critical lesson: When changing the API port, grep ALL frontend files for the old port number.** The port appears in multiple locations that must all be updated consistently:
+- `dataService.ts` — `API_BASE_URL` fallback
+- `NetworkDatabase.tsx` — `apiUrl` initial state
+- `AuthContext.tsx` — `validateUserFromDB` fallback URL
+- Error toast messages mentioning the port number
+
+Use `grep_search` for the old port (e.g. `3100`) across `src/**/*.tsx` and `src/**/*.ts` to find every reference. Missing any one causes `ERR_CONNECTION_REFUSED` errors.
 
 ### CORS_ORIGIN in .env
 Include all network IPs that clients might use to access the frontend:
@@ -200,8 +208,8 @@ The project deploys to HuggingFace Spaces as a **Docker container** running Expr
 
 | Environment | Frontend | API | Database | Port |
 |-------------|----------|-----|----------|------|
-| Local dev | Vite dev server | Express + SQL Server | SIMRemunerasi (SQL Server 2019) | 5173 + 3100 |
-| HF Spaces | Express static middleware | Express + SQLite | siremunika.db (SQLite) | 7860 |
+| Local dev | Vite dev server | Express + Supabase | Supabase PostgreSQL | 5173 + 7860 |
+| HF Spaces | Express static middleware | Express + Supabase | Supabase PostgreSQL | 7860 |
 
 ### Directory structure for HF deployment
 

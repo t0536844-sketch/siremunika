@@ -40,7 +40,7 @@ export default function NetworkDatabase() {
   // State untuk connection
   const [apiUrl, setApiUrl] = useState(
     window.location.port === '5173' || window.location.port === '5174'
-      ? `http://${window.location.hostname}:3100`
+      ? `http://${window.location.hostname}:7860`
       : ''  // Same server on HF Spaces
   );
   const [isConnected, setIsConnected] = useState(false);
@@ -87,7 +87,7 @@ export default function NetworkDatabase() {
       setIsConnected(false);
       setHealthInfo({ ok: false, error: error instanceof Error ? error.message : 'Unknown error' });
       setSyncStatus('error');
-      showToast('error', 'Tidak dapat terhubung', 'Pastikan API bridge berjalan di port 3100');
+      showToast('error', 'Tidak dapat terhubung', 'Pastikan API server berjalan di port 7860');
     } finally {
       setIsConnecting(false);
     }

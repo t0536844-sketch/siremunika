@@ -1,10 +1,10 @@
 import { Pendapatan, JasaMedis, Indexing, HasilKalkulasi, ApprovalItem, Nakes, ActivityLog, Pembayaran } from './mockData';
 
 // API Configuration — uses relative URL when frontend and API are on the same server (HF Spaces),
-// or absolute URL with port 3100 for local development (separate Express API bridge)
-const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') || 
-  (window.location.port === '5173' || window.location.port === '5174' 
-    ? `http://${window.location.hostname}:3100`  // Local dev: separate API server
+// or absolute URL with port 7860 for local development (Express+Supabase API bridge)
+const API_BASE_URL = localStorage.getItem('sim_remunerasi_api_url') ||
+  (window.location.port === '5173' || window.location.port === '5174'
+    ? `http://${window.location.hostname}:7860`  // Local dev: Express+Supabase on 7860
     : '');  // HF Spaces or production: same server, relative URLs
 
 // Generic API fetch function with error handling
@@ -179,12 +179,12 @@ export const dataService = {
       const nakes = data.nakes || [];
       
       const totalPendapatanBulanIni = pendapatan
-        .filter((p: any) => p.tanggal.startsWith('2026-01'))
-        .reduce((sum: number, p: any) => sum + p.nilaiPendapatan, 0);
-      
+        .filter((p: any) => (p.tanggal || '').startsWith('2026-01'))
+        .reduce((sum: number, p: any) => sum + (p.nilaiPendapatan || 0), 0);
+
       const totalJasaDibayarkan = jasaMedis
         .filter((j: any) => j.status === 'paid')
-        .reduce((sum: number, j: any) => sum + j.totalJasa, 0);
+        .reduce((sum: number, j: any) => sum + (j.totalJasa || 0), 0);
       
       const jumlahNakesAktif = nakes.filter((n: any) => n.statusAktif).length;
       

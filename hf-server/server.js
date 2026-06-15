@@ -19,6 +19,7 @@ const CAMEL_CASE_MAP = {
   jumlahpasien: 'jumlahPasien',
   nilaipendapatan: 'nilaiPendapatan',
   // jasa_medis
+  tanggal: 'periode',
   tarifjasa: 'tarifJasa',
   jumlahtindakan: 'jumlahTindakan',
   totaljasa: 'totalJasa',

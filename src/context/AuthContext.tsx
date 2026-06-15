@@ -58,7 +58,7 @@ const CREDENTIALS: Record<string, string> = {
 // ─── Database validation ────────────────────────────────────────
 async function validateUserFromDB(username: string, password: string): Promise<{ ok: true; user: UserAccount; role: Role } | { ok: false; error: string }> {
   try {
-    const apiUrl = localStorage.getItem('sim_remunerasi_api_url') || 'http://localhost:3100';
+    const apiUrl = localStorage.getItem('sim_remunerasi_api_url') || 'http://localhost:7860';
     
     const response = await fetch(`${apiUrl}/api/auth`, {
       method: 'POST',

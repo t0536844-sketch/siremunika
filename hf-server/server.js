@@ -19,7 +19,6 @@ const CAMEL_CASE_MAP = {
   jumlahpasien: 'jumlahPasien',
   nilaipendapatan: 'nilaiPendapatan',
   // jasa_medis
-  tanggal: 'periode',
   tarifjasa: 'tarifJasa',
   jumlahtindakan: 'jumlahTindakan',
   totaljasa: 'totalJasa',
@@ -72,12 +71,12 @@ const CAMEL_CASE_MAP = {
 // PostgREST rejects unknown columns — strip fields not in the table schema
 const TABLE_COLUMNS = {
   pendapatan: ['id','tanggal','unit','jenispelayanan','jumlahpasien','nilaipendapatan','operator','status'],
-  jasa_medis: ['id','tanggal','nakes','nakesid','unit','jabatan','jenispelayanan','tarifjasa','jumlahtindakan','totaljasa','status'],
-  indexing:    ['id','kodeindex','namaindex','deskripsi','bobot','aktif'],
-  hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','status'],
+  jasa_medis: ['id','periode','nakes','jabatan','unit','tarifjasa','jumlahtindakan','totaljasa','status'],
+  indexing:    ['id','kodeindex','namaindex','bobot','kategori','keterangan','aktif'],
+  hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','pajak','netto','status'],
   approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
   nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
-  pembayaran:  ['id','periode','nakesid','nakesnama','unit','jabatan','jasamedis','jasaparamedis','jasapenunjang','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','norekening','tanggalpembayaran','tanggalpersetujuan','tanggalfinalisasi','nobukti'],
+  pembayaran:  ['id','periode','nakesid','nakesnama','nip','jabatan','unit','bank','norekening','jasamedis','jasaparamedis','jasapenunjang','bonusprestasi','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','tanggalfinalisasi','tanggalpersetujuan','tanggalpembayaran','nobukti','catatan'],
   mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
   mst_role:    ['id','namarole','deskripsi'],
 };

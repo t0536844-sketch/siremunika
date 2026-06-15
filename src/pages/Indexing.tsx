@@ -64,11 +64,11 @@ export default function Indexing() {
   const filtered = items.filter(
     (item) =>
       (filterKategori === 'Semua' || item.kategori === filterKategori) &&
-      (item.namaIndex.toLowerCase().includes(search.toLowerCase()) ||
-        item.kodeIndex.toLowerCase().includes(search.toLowerCase()))
+      ((item.namaIndex || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.kodeIndex || '').toLowerCase().includes(search.toLowerCase()))
   );
 
-  const totalBobot = filtered.reduce((s, i) => s + i.bobot, 0);
+  const totalBobot = filtered.reduce((s, i) => s + (i.bobot || 0), 0);
   const totalAktif = items.filter((i) => i.aktif).length;
 
   const openAdd = () => {
@@ -87,12 +87,12 @@ export default function Indexing() {
   const openEdit = (item: Indexing) => {
     setEditing(item);
     setForm({
-      kodeIndex: item.kodeIndex,
-      namaIndex: item.namaIndex,
-      bobot: item.bobot,
-      kategori: item.kategori,
-      keterangan: item.keterangan,
-      aktif: item.aktif,
+      kodeIndex: item.kodeIndex || '',
+      namaIndex: item.namaIndex || '',
+      bobot: item.bobot || 1.0,
+      kategori: item.kategori || kategoriList[0],
+      keterangan: item.keterangan || '',
+      aktif: item.aktif ?? true,
     });
     setShowModal(true);
   };
@@ -246,7 +246,7 @@ export default function Indexing() {
             <div key={kat} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
               <div className={`px-5 py-3 border-b border-slate-200 ${warnaKategori[kat]}`}>
                 <h3 className="font-bold text-sm">{kat}</h3>
-                <p className="text-xs opacity-80">{itemsKat.length} index · Total bobot: {itemsKat.reduce((s, i) => s + i.bobot, 0).toFixed(2)}</p>
+                <p className="text-xs opacity-80">{itemsKat.length} index · Total bobot: {itemsKat.reduce((s, i) => s + (i.bobot || 0), 0).toFixed(2)}</p>
               </div>
               <div className="divide-y divide-slate-100">
                 {itemsKat.map((item) => (
@@ -266,7 +266,7 @@ export default function Indexing() {
                       <p className="text-xs text-slate-500 mt-1 line-clamp-1">{item.keterangan}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span className="text-lg font-bold text-teal-700">{item.bobot.toFixed(2)}</span>
+                      <span className="text-lg font-bold text-teal-700">{(item.bobot ?? 0).toFixed(2)}</span>
                       <div className="flex gap-0.5">
                         <button
                           onClick={() => openEdit(item)}

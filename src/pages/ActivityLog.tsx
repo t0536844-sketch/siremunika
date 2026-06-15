@@ -66,9 +66,9 @@ export default function ActivityLogPage() {
     (i) =>
       (filterModule === 'Semua' || i.module === filterModule) &&
       (filterUser === 'Semua' || i.user === filterUser) &&
-      (i.detail.toLowerCase().includes(search.toLowerCase()) ||
-        i.target.toLowerCase().includes(search.toLowerCase()) ||
-        i.action.toLowerCase().includes(search.toLowerCase()))
+      ((i.detail || '').toLowerCase().includes(search.toLowerCase()) ||
+        (i.target || '').toLowerCase().includes(search.toLowerCase()) ||
+        (i.action || '').toLowerCase().includes(search.toLowerCase()))
   );
 
   const handleExport = () => {

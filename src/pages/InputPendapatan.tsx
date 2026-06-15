@@ -107,13 +107,13 @@ export default function InputPendapatan() {
   const filtered = items.filter(
     (item) =>
       (filterUnit === 'Semua' || item.unit === filterUnit) &&
-      (item.unit.toLowerCase().includes(search.toLowerCase()) ||
-        item.id.toLowerCase().includes(search.toLowerCase()) ||
-        item.operator.toLowerCase().includes(search.toLowerCase()))
+      ((item.unit || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.id || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.operator || '').toLowerCase().includes(search.toLowerCase()))
   );
 
-  const totalNilai = filtered.reduce((sum, i) => sum + i.nilaiPendapatan, 0);
-  const totalPasien = filtered.reduce((sum, i) => sum + i.jumlahPasien, 0);
+  const totalNilai = filtered.reduce((sum, i) => sum + (i.nilaiPendapatan || 0), 0);
+  const totalPasien = filtered.reduce((sum, i) => sum + (i.jumlahPasien || 0), 0);
 
   // ── Handlers CRUD ────────────────────────────────────────────
   const openAdd = () => {
@@ -124,7 +124,7 @@ export default function InputPendapatan() {
 
   const openEdit = (item: Pendapatan) => {
     setEditing(item);
-    setForm({ tanggal: item.tanggal, unit: item.unit, jenisPelayanan: item.jenisPelayanan, jumlahPasien: item.jumlahPasien, nilaiPendapatan: item.nilaiPendapatan, operator: item.operator });
+    setForm({ tanggal: item.tanggal || '', unit: item.unit || daftarUnit[0], jenisPelayanan: item.jenisPelayanan || jenisPelayananList[0], jumlahPasien: item.jumlahPasien || 0, nilaiPendapatan: item.nilaiPendapatan || 0, operator: item.operator || '' });
     setShowModal(true);
   };
 
@@ -307,8 +307,8 @@ export default function InputPendapatan() {
                   <td className="px-5 py-3 text-right font-bold text-slate-800 dark:text-slate-100">{formatRupiah(item.nilaiPendapatan)}</td>
                   <td className="px-5 py-3 text-slate-600 dark:text-slate-300">{item.operator}</td>
                   <td className="px-5 py-3 text-center">
-                    <span className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold ${statusColors[item.status]}`}>
-                      {statusLabel[item.status]}
+                    <span className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold ${statusColors[item.status || 'pending']}`}>
+                      {statusLabel[item.status || 'pending']}
                     </span>
                   </td>
                   <td className="px-5 py-3">

@@ -106,13 +106,13 @@ export default function InputJasa() {
   const filtered = items.filter(
     (item) =>
       (filterStatus === 'Semua' || item.status === filterStatus) &&
-      (item.nakes.toLowerCase().includes(search.toLowerCase()) ||
-        item.unit.toLowerCase().includes(search.toLowerCase()) ||
-        item.jabatan.toLowerCase().includes(search.toLowerCase()))
+      ((item.nakes || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.unit || '').toLowerCase().includes(search.toLowerCase()) ||
+        (item.jabatan || '').toLowerCase().includes(search.toLowerCase()))
   );
 
-  const totalJasa = filtered.reduce((sum, i) => sum + i.totalJasa, 0);
-  const totalTindakan = filtered.reduce((sum, i) => sum + i.jumlahTindakan, 0);
+  const totalJasa = filtered.reduce((sum, i) => sum + (i.totalJasa || 0), 0);
+  const totalTindakan = filtered.reduce((sum, i) => sum + (i.jumlahTindakan || 0), 0);
 
   // ── CRUD ─────────────────────────────────────────────────────
   const openAdd = () => {
@@ -123,7 +123,7 @@ export default function InputJasa() {
 
   const openEdit = (item: JasaMedis) => {
     setEditing(item);
-    setForm({ periode: item.periode, nakes: item.nakes, jabatan: item.jabatan, unit: item.unit, tarifJasa: item.tarifJasa, jumlahTindakan: item.jumlahTindakan, status: item.status });
+    setForm({ periode: item.periode || '', nakes: item.nakes || '', jabatan: item.jabatan || daftarJabatan[0], unit: item.unit || daftarUnit[0], tarifJasa: item.tarifJasa || 0, jumlahTindakan: item.jumlahTindakan || 0, status: item.status || 'pending' });
     setShowModal(true);
   };
 
@@ -315,8 +315,8 @@ export default function InputJasa() {
                   <td className="px-5 py-3 text-right text-slate-600 dark:text-slate-300">{formatNumber(item.jumlahTindakan)}</td>
                   <td className="px-5 py-3 text-right font-bold text-cyan-700 dark:text-cyan-400">{formatRupiah(item.totalJasa)}</td>
                   <td className="px-5 py-3 text-center">
-                    <span className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold ${statusColors[item.status]}`}>
-                      {statusLabel[item.status]}
+                    <span className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold ${statusColors[item.status || 'pending']}`}>
+                      {statusLabel[item.status || 'pending']}
                     </span>
                   </td>
                   <td className="px-5 py-3">
@@ -367,11 +367,11 @@ export default function InputJasa() {
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Periode</label>
-                <input value={form.periode} onChange={(e) => setForm({ ...form, periode: e.target.value })} className={ic} />
+                <input value={form.periode || ''} onChange={(e) => setForm({ ...form, periode: e.target.value })} className={ic} />
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Nama Nakes</label>
-                <input value={form.nakes} onChange={(e) => setForm({ ...form, nakes: e.target.value })} placeholder="Contoh: dr. Andi Putra" className={ic} />
+                <input value={form.nakes || ''} onChange={(e) => setForm({ ...form, nakes: e.target.value })} placeholder="Contoh: dr. Andi Putra" className={ic} />
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Jabatan</label>

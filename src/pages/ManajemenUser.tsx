@@ -102,9 +102,9 @@ export default function ManajemenUser() {
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const matchSearch  = search === '' ||
-        u.nama.toLowerCase().includes(search.toLowerCase()) ||
-        u.username.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase());
+        (u.nama || '').toLowerCase().includes(search.toLowerCase()) ||
+        (u.username || '').toLowerCase().includes(search.toLowerCase()) ||
+        (u.email || '').toLowerCase().includes(search.toLowerCase());
       const matchRole    = filterRole   === 'Semua' || u.roleId === filterRole;
       const matchStatus  = filterStatus === 'Semua' || u.status === filterStatus;
       const matchUnit    = filterUnit   === 'Semua' || u.unit   === filterUnit;

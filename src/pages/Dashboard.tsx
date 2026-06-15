@@ -479,9 +479,9 @@ export default function Dashboard() {
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-bold text-teal-700">{formatRupiah(item.nilaiPendapatan)}</p>
                   <span
-                    className={`text-[9px] px-2 py-0.5 rounded-full border font-bold ${statusColors[item.status]}`}
+                    className={`text-[9px] px-2 py-0.5 rounded-full border font-bold ${statusColors[item.status || 'pending']}`}
                   >
-                    {statusLabel[item.status]}
+                    {statusLabel[item.status || 'pending']}
                   </span>
                 </div>
               </div>
@@ -594,9 +594,9 @@ export default function Dashboard() {
                     <td className="px-6 py-4 text-right font-bold text-teal-700">{formatRupiah(item.totalJasa)}</td>
                     <td className="px-6 py-4 text-center">
                       <span
-                        className={`text-[10px] px-2.5 py-1 rounded-full border font-bold ${statusColors[item.status]}`}
+                        className={`text-[10px] px-2.5 py-1 rounded-full border font-bold ${statusColors[item.status || 'pending']}`}
                       >
-                        {statusLabel[item.status]}
+                        {statusLabel[item.status || 'pending']}
                       </span>
                     </td>
                   </tr>

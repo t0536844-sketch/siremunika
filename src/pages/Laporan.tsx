@@ -69,7 +69,7 @@ export default function Laporan() {
     (i) =>
       (filterKategori  === 'Semua' || i.kategori  === filterKategori)  &&
       (filterFrekuensi === 'Semua' || i.frekuensi === filterFrekuensi) &&
-      i.nama.toLowerCase().includes(search.toLowerCase())
+      (i.nama || '').toLowerCase().includes(search.toLowerCase())
   );
 
   // ── Helpers: loading state ──────────────────────────────────────────────────

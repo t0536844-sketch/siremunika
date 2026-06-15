@@ -74,16 +74,16 @@ export default function Hasil() {
 
   const filtered = items.filter((item) => filterStatus === 'Semua' || item.status === filterStatus);
 
-  const totalNetto = filtered.reduce((s, i) => s + i.netto, 0);
-  const totalPendapatan = filtered.reduce((s, i) => s + i.totalPendapatan, 0);
-  const totalJasa = filtered.reduce((s, i) => s + i.totalJasaMedis + i.totalJasaParamedis + i.totalJasaPenunjang, 0);
+  const totalNetto = filtered.reduce((s, i) => s + (i.netto || 0), 0);
+  const totalPendapatan = filtered.reduce((s, i) => s + (i.totalPendapatan || 0), 0);
+  const totalJasa = filtered.reduce((s, i) => s + (i.totalJasaMedis || 0) + (i.totalJasaParamedis || 0) + (i.totalJasaPenunjang || 0), 0);
 
   const chartData = items.map((item) => ({
-    unit: item.unit.split(' ').slice(-1).join(' ') || item.unit,
+    unit: (item.unit || '').split(' ').slice(-1).join(' ') || item.unit,
     unitFull: item.unit,
-    pendapatan: item.totalPendapatan / 1000000,
-    jasa: (item.totalJasaMedis + item.totalJasaParamedis + item.totalJasaPenunjang) / 1000000,
-    netto: item.netto / 1000000,
+    pendapatan: (item.totalPendapatan || 0) / 1000000,
+    jasa: ((item.totalJasaMedis || 0) + (item.totalJasaParamedis || 0) + (item.totalJasaPenunjang || 0)) / 1000000,
+    netto: (item.netto || 0) / 1000000,
   }));
 
   const statusIcon = {
@@ -226,7 +226,7 @@ export default function Hasil() {
             </thead>
             <tbody>
               {filtered.map((item) => {
-                const Icon = statusIcon[item.status];
+                const Icon = statusIcon[item.status || 'draft'];
                 return (
                   <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-5 py-3 text-slate-600 text-xs">{item.periode}</td>
@@ -238,9 +238,9 @@ export default function Hasil() {
                     <td className="px-5 py-3 text-right text-emerald-700 font-medium">{formatRupiah(item.bonusPrestasi)}</td>
                     <td className="px-5 py-3 text-right font-bold text-slate-800">{formatRupiah(item.netto)}</td>
                     <td className="px-5 py-3 text-center">
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full border font-semibold ${statusColors[item.status]}`}>
+                      <span className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full border font-semibold ${statusColors[item.status || 'draft']}`}>
                         <Icon className="w-3 h-3" />
-                        {statusLabel[item.status]}
+                        {statusLabel[item.status || 'draft']}
                       </span>
                     </td>
                     <td className="px-5 py-3">

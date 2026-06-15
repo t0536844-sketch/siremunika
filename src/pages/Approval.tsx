@@ -175,16 +175,16 @@ export default function Approval() {
       (filterTipe   === 'Semua' || item.tipe   === filterTipe) &&
       (filterLevel  === 'Semua' || item.level  === filterLevel) &&
       (filterStatus === 'Semua' || item.status === filterStatus) &&
-      (item.referensi.toLowerCase().includes(search.toLowerCase()) ||
-       item.pengaju.toLowerCase().includes(search.toLowerCase()) ||
-       item.catatan.toLowerCase().includes(search.toLowerCase()))
+      ((item.referensi || '').toLowerCase().includes(search.toLowerCase()) ||
+       (item.pengaju || '').toLowerCase().includes(search.toLowerCase()) ||
+       (item.catatan || '').toLowerCase().includes(search.toLowerCase()))
   ), [items, filterTipe, filterLevel, filterStatus, search]);
 
   // ── Stats ────────────────────────────────────────────────────
   const totalPending  = items.filter((i) => i.status === 'pending').length;
   const totalApproved = items.filter((i) => i.status === 'approved').length;
   const totalRejected = items.filter((i) => i.status === 'rejected').length;
-  const totalNilaiPending = items.filter((i) => i.status === 'pending').reduce((s, i) => s + i.nilai, 0);
+  const totalNilaiPending = items.filter((i) => i.status === 'pending').reduce((s, i) => s + (i.nilai || 0), 0);
 
   // ── Permission check ─────────────────────────────────────────
   const canApproveLevel = (level: string): boolean => {
@@ -437,8 +437,8 @@ export default function Approval() {
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold">
                       {tipeLabel[item.tipe]}
                     </span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${statusColors[item.status]}`}>
-                      {statusLabel[item.status]}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${statusColors[item.status || 'pending']}`}>
+                      {statusLabel[item.status || 'pending']}
                     </span>
                     {!canProcess && item.status === 'pending' && (
                       <span className="text-[9px] px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-900/30 text-rose-500 dark:text-rose-400 border border-rose-200 dark:border-rose-700 font-bold">
@@ -574,7 +574,7 @@ export default function Approval() {
                   { label: 'Pengaju', value: detailItem.pengaju, icon: User },
                   { label: 'Tanggal Pengajuan', value: formatDate(detailItem.tanggalPengajuan), icon: CalendarDays },
                   { label: 'Level Approval', value: detailItem.level, icon: Building2 },
-                  { label: 'Status', value: statusLabel[detailItem.status], icon: detailItem.status === 'approved' ? CheckCircle2 : detailItem.status === 'rejected' ? XCircle : Clock },
+                  { label: 'Status', value: statusLabel[detailItem.status || 'pending'], icon: detailItem.status === 'approved' ? CheckCircle2 : detailItem.status === 'rejected' ? XCircle : Clock },
                 ].map((f) => {
                   const Icon = f.icon;
                   return (

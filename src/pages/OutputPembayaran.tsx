@@ -59,9 +59,9 @@ export default function OutputPembayaran() {
   const filtered = items.filter((item) => {
     const matchSearch =
       search === '' ||
-      item.nakesNama.toLowerCase().includes(search.toLowerCase()) ||
-      item.nip.includes(search) ||
-      item.noBukti?.includes(search);
+      (item.nakesNama || '').toLowerCase().includes(search.toLowerCase()) ||
+      (item.nip || '').includes(search) ||
+      (item.noBukti || '').includes(search);
     const matchStatus = filterStatus === 'Semua' || item.status === filterStatus;
     const matchUnit = filterUnit === 'Semua' || item.unit === filterUnit;
     const matchJabatan = filterJabatan === 'Semua' || item.jabatan === filterJabatan;
@@ -71,10 +71,10 @@ export default function OutputPembayaran() {
   // Calculate totals
   const totals = filtered.reduce(
     (acc, item) => ({
-      totalKotor: acc.totalKotor + item.totalJasaKotor,
-      totalPotongan: acc.totalPotongan + item.totalPotongan,
-      totalNetto: acc.totalNetto + item.nettoDibayar,
-      totalPajak: acc.totalPajak + item.pajakPPh,
+      totalKotor: acc.totalKotor + (item.totalJasaKotor || 0),
+      totalPotongan: acc.totalPotongan + (item.totalPotongan || 0),
+      totalNetto: acc.totalNetto + (item.nettoDibayar || 0),
+      totalPajak: acc.totalPajak + (item.pajakPPh || 0),
     }),
     { totalKotor: 0, totalPotongan: 0, totalNetto: 0, totalPajak: 0 }
   );
@@ -453,7 +453,8 @@ export default function OutputPembayaran() {
             </thead>
             <tbody>
               {filtered.map((item) => {
-                const StatusIcon = statusConfig[item.status].icon;
+                const cfg = statusConfig[item.status || 'draft'];
+                const StatusIcon = cfg.icon;
                 return (
                   <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-5 py-3 font-mono text-xs text-green-700 font-semibold">{item.id}</td>
@@ -465,13 +466,13 @@ export default function OutputPembayaran() {
                     </td>
                     <td className="px-5 py-3 text-slate-600 text-xs">{item.jabatan}</td>
                     <td className="px-5 py-3 text-slate-600 text-xs">{item.unit}</td>
-                    <td className="px-5 py-3 text-right text-slate-600 text-xs">{formatRupiah(item.totalJasaKotor)}</td>
-                    <td className="px-5 py-3 text-right text-red-700 text-xs">{formatRupiah(item.totalPotongan)}</td>
-                    <td className="px-5 py-3 text-right font-bold text-green-700">{formatRupiah(item.nettoDibayar)}</td>
+                    <td className="px-5 py-3 text-right text-slate-600 text-xs">{formatRupiah(item.totalJasaKotor || 0)}</td>
+                    <td className="px-5 py-3 text-right text-red-700 text-xs">{formatRupiah(item.totalPotongan || 0)}</td>
+                    <td className="px-5 py-3 text-right font-bold text-green-700">{formatRupiah(item.nettoDibayar || 0)}</td>
                     <td className="px-5 py-3 text-center">
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full border font-semibold ${statusConfig[item.status].color}`}>
+                      <span className={`inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full border font-semibold ${cfg.color}`}>
                         <StatusIcon className="w-3 h-3" />
-                        {statusConfig[item.status].label}
+                        {cfg.label}
                       </span>
                     </td>
                     <td className="px-5 py-3">

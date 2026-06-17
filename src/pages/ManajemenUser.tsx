@@ -139,7 +139,9 @@ export default function ManajemenUser() {
       } catch (e) {
         showToast('warning', 'Updated locally only', 'Failed to sync to database');
       }
+      setModalUser(null);
     } else {
+      const pwd = generatePassword();
       const newUser: UserAccount = {
         id: `USR-${String(users.length + 1).padStart(3, '0')}`,
         ...data,
@@ -152,13 +154,20 @@ export default function ManajemenUser() {
       };
       setUsers((prev) => [newUser, ...prev]);
       try {
-        await dataService.saveUser({ nama: data.nama, username: data.username, email: data.email, noHp: data.noHp, roleId: data.roleId, unitId: data.unit, jabatan: data.jabatan, status: data.status });
+        await dataService.saveUser({ nama: data.nama, username: data.username, email: data.email, noHp: data.noHp, roleId: data.roleId, unitId: data.unit, jabatan: data.jabatan, status: data.status, password: pwd });
         showToast('success', 'User baru dibuat', `${data.nama} (${data.username})`);
+        // Show generated password after successful save
+        setGeneratedPass(pwd);
+        setResetPassTarget(newUser);
+        setModalUser(null);
       } catch (e) {
         showToast('warning', 'Created locally only', 'Failed to sync to database');
+        // Still show password so user can note it
+        setGeneratedPass(pwd);
+        setResetPassTarget(newUser);
+        setModalUser(null);
       }
     }
-    setModalUser(null);
   };
 
   const handleDeleteUser = async (id: string) => {

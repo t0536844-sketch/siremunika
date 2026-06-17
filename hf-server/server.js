@@ -77,8 +77,8 @@ const TABLE_COLUMNS = {
   approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
   nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
   pembayaran:  ['id','periode','nakesid','nakesnama','nip','jabatan','unit','bank','norekening','jasamedis','jasaparamedis','jasapenunjang','bonusprestasi','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','tanggalfinalisasi','tanggalpersetujuan','tanggalpembayaran','nobukti','catatan'],
-  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
-  mst_role:    ['id','namarole','deskripsi'],
+  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status','password'],
+  mst_role:    ['id','namarole','level','deskripsi'],
 };
 
 function stripPayload(payload, table) {

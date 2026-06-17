@@ -77,9 +77,17 @@ const TABLE_COLUMNS = {
   approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
   nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
   pembayaran:  ['id','periode','nakesid','nakesnama','nip','jabatan','unit','bank','norekening','jasamedis','jasaparamedis','jasapenunjang','bonusprestasi','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','tanggalfinalisasi','tanggalpersetujuan','tanggalpembayaran','nobukti','catatan'],
-  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status','password'],
+  mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
   mst_role:    ['id','namarole','level','deskripsi'],
 };
+
+// ── roleId string↔integer mapping (frontend uses string RoleId, Supabase uses integer) ──
+const ROLE_ID_TO_INT = {
+  superadmin: 1, kepala_keuangan: 2, direktur: 3, kepala_unit: 4, operator_unit: 5,
+  admin_keuangan: 6, verifikator: 7, viewer: 8,
+};
+const INT_TO_ROLE_ID = {};
+for (const [k, v] of Object.entries(ROLE_ID_TO_INT)) INT_TO_ROLE_ID[v] = k;
 
 function stripPayload(payload, table) {
   const allowed = TABLE_COLUMNS[table];
@@ -114,6 +122,14 @@ function transformRow(row, direction = 'toCamel') {
   const out = {};
   for (const [k, v] of Object.entries(row)) {
     out[fn(k)] = Array.isArray(v) ? v.map(r => transformRow(r, direction)) : (v && typeof v === 'object' ? transformRow(v, direction) : v);
+  }
+  // ── roleId string↔integer conversion for mst_user ──
+  if (direction === 'toCamel') {
+    // Reading from Supabase: integer roleid → string RoleId
+    if (out.roleId !== undefined && typeof out.roleId === 'number') out.roleId = INT_TO_ROLE_ID[out.roleId] || String(out.roleId);
+  } else {
+    // Writing to Supabase: string RoleId → integer roleid
+    if (out.roleid !== undefined && typeof out.roleid === 'string') out.roleid = ROLE_ID_TO_INT[out.roleid] || out.roleid;
   }
   return out;
 }
@@ -230,6 +246,12 @@ app.get('/api/export', async (_req, res) => {
       sbSelect('mst_role'),
     ]);
 
+    // Convert mst_role.id from integer to string RoleId for frontend
+    const mstRoleMapped = mstRole.map(r => ({
+      ...r,
+      id: typeof r.id === 'number' ? (INT_TO_ROLE_ID[r.id] || String(r.id)) : r.id,
+    }));
+
     const data = {
       pendapatan,
       jasaMedis,
@@ -239,7 +261,7 @@ app.get('/api/export', async (_req, res) => {
       nakes,
       pembayaran,
       mstUser,
-      mstRole,
+      mstRole: mstRoleMapped,
       activityLog: [],
       notification: [],
       appSettings: { appName: 'SIM Remunerasi', version: '1.0', pajakPPh: 5.5, bpjsPercent: 1 },
@@ -432,7 +454,9 @@ app.delete('/api/user/:id', async (req, res) => {
 app.post('/api/role', async (req, res) => {
   try {
     const d = req.body;
-    if (!d.id) d.id = `ROL-${uuidv4().slice(0,6)}`;
+    // Convert string RoleId to integer for Supabase mst_role.id
+    if (d.id && ROLE_ID_TO_INT[d.id]) d.id = ROLE_ID_TO_INT[d.id];
+    if (!d.id) d.id = Object.keys(ROLE_ID_TO_INT).length + 1;
     await sbUpsert('mst_role', [d]);
     res.json({ ok: true, id: d.id });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

@@ -30,12 +30,14 @@ const tipeIcon: Record<string, any> = {
   pendapatan: Wallet,
   jasa:       Stethoscope,
   hasil:      BarChart3,
+  hasil_kalkulasi: BarChart3,
 };
 
 const tipeLabel: Record<string, string> = {
   pendapatan: 'Data Pendapatan',
   jasa:       'Jasa Medis',
   hasil:      'Hasil Kalkulasi',
+  hasil_kalkulasi: 'Hasil Kalkulasi',
 };
 
 const tipeColor: Record<string, string> = {
@@ -410,7 +412,7 @@ export default function Approval() {
         )}
 
         {filtered.map((item) => {
-          const TipeIcon = tipeIcon[item.tipe];
+          const TipeIcon = tipeIcon[item.tipe] || FileText;
           const canProcess = canApproveLevel(item.level);
           return (
             <div key={item.id}

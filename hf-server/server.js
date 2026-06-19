@@ -385,9 +385,9 @@ app.post('/api/import', async (req, res) => {
 app.post('/api/approval', async (req, res) => {
   try {
     const d = req.body;
-    if (!d.id) return res.status(400).json({ ok: false, error: 'id required' });
-    await sbUpdate('approval', d.id, d);
-    res.json({ ok: true });
+    if (!d.id) d.id = `APR-${uuidv4().slice(0,8)}`;
+    await sbUpsert('approval', [d]);
+    res.json({ ok: true, id: d.id });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -395,9 +395,9 @@ app.post('/api/approval', async (req, res) => {
 app.post('/api/hasil-kalkulasi', async (req, res) => {
   try {
     const d = req.body;
-    if (!d.id) return res.status(400).json({ ok: false, error: 'id required' });
-    await sbUpdate('hasil_kalkulasi', d.id, d);
-    res.json({ ok: true });
+    if (!d.id) d.id = `HSL-${uuidv4().slice(0,8)}`;
+    await sbUpsert('hasil_kalkulasi', [d]);
+    res.json({ ok: true, id: d.id });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

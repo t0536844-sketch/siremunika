@@ -34,6 +34,11 @@ const CAMEL_CASE_MAP = {
   bonusprestasi: 'bonusPrestasi',
   // approval
   tanggalpengajuan: 'tanggalPengajuan',
+  approvedby: 'approvedBy',
+  approvedat: 'approvedAt',
+  rejectedby: 'rejectedBy',
+  rejectedat: 'rejectedAt',
+  alasantolak: 'alasanTolak',
   // nakes
   nostr: 'noStr',
   nosip: 'noSip',
@@ -74,7 +79,7 @@ const TABLE_COLUMNS = {
   jasa_medis: ['id','periode','nakes','jabatan','unit','tarifjasa','jumlahtindakan','totaljasa','status'],
   indexing:    ['id','kodeindex','namaindex','bobot','kategori','keterangan','aktif'],
   hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','pajak','netto','status'],
-  approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
+  approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan','approvedby','approvedat','rejectedby','rejectedat','alasantolak'],
   nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
   pembayaran:  ['id','periode','nakesid','nakesnama','nip','jabatan','unit','bank','norekening','jasamedis','jasaparamedis','jasapenunjang','bonusprestasi','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','tanggalfinalisasi','tanggalpersetujuan','tanggalpembayaran','nobukti','catatan'],
   mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],

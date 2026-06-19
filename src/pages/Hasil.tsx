@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { Download, FileSpreadsheet, FileText, Eye, Filter, CheckCircle2, FileX, Clock, Printer, Banknote, Zap } from 'lucide-react';
 import { dataHasil } from '../data/mockData';
-import { formatRupiah, statusColors, statusLabel } from '../utils/helpers';
+import { formatRupiah, statusColors, statusLabel, hitungJasaPerorangan } from '../utils/helpers';
 import type { HasilKalkulasi } from '../data/mockData';
 import { exportToExcel, exportToPDF, printPage } from '../utils/exporters';
 import { useApp } from '../context/AppContext';
@@ -179,15 +179,113 @@ export default function Hasil() {
         </button>
         <button
           onClick={async () => {
-            if (!confirm(`Generate pembayaran untuk ${filtered.length} unit? Status akan berubah menjadi final dan draft pembayaran akan dibuat.`)) return;
+            const unitsToFinalize = filtered.filter((i) => i.status !== 'approved');
+            if (unitsToFinalize.length === 0) {
+              showToast('info', 'Tidak Ada Unit Baru', 'Semua unit sudah approved atau final.');
+              return;
+            }
+            if (!confirm(`Generate pembayaran untuk ${unitsToFinalize.length} unit? Status akan berubah menjadi final, draft pembayaran akan dibuat, dan approval item akan diajukan.`)) return;
+
+            // Optimistic UI: mark all non-approved units as final locally
             setItems(items.map((i) => (i.status !== 'approved' ? { ...i, status: 'final' as const } : i)));
+
             try {
-              for (const i of filtered) {
-                if (i.status !== 'approved') await dataService.updateHasilKalkulasi({ id: i.id, status: 'final' });
+              const ts = Date.now();
+              let nApproval = 0;
+              let nPembayaran = 0;
+
+              // Load all nakes data
+              const allNakes = await dataService.getNakes();
+
+              // Step 1: Finalize hasil items & create approval + pembayaran records
+              for (const hasil of unitsToFinalize) {
+                // Finalize hasil status
+                await dataService.updateHasilKalkulasi({ id: hasil.id, status: 'final' });
+
+                // Create approval item for this unit
+                const approvalItem = {
+                  id: `APR-${ts}-${hasil.id}`,
+                  tipe: 'hasil_kalkulasi',
+                  referensi: hasil.id,
+                  nilai: hasil.netto,
+                  pengaju: 'System',
+                  tanggalPengajuan: new Date().toISOString().slice(0, 10),
+                  status: 'pending',
+                  catatan: 'Auto-generated from hasil kalkulasi',
+                  level: 'Unit',
+                };
+                await dataService.updateApproval(approvalItem);
+                nApproval++;
+
+                // Get nakes belonging to this unit
+                const unitNakes = allNakes.filter((n) => n.unit === hasil.unit && n.statusAktif);
+
+                // Calculate total jasa produksi for the unit
+                // totalJasaProduksiUnit = sum of (jasaPerTindakan * totalTindakan) for all nakes in unit
+                const totalJasaProduksiUnit = unitNakes.reduce(
+                  (sum, n) => sum + (n.jasaPerTindakan || 0) * (n.totalTindakan || 0), 0
+                );
+
+                // If no nakes or zero production, skip pembayaran creation for this unit
+                if (unitNakes.length === 0 || totalJasaProduksiUnit === 0) continue;
+
+                // Create pembayaran record for each nakes
+                for (const nakes of unitNakes) {
+                  const nakesProduksi = (nakes.jasaPerTindakan || 0) * (nakes.totalTindakan || 0);
+                  const nakesShare = nakesProduksi / totalJasaProduksiUnit;
+
+                  const jasaMedis = Math.round(hitungJasaPerorangan(
+                    hasil.totalJasaMedis, nakes.jasaPerTindakan, totalJasaProduksiUnit, nakes.totalTindakan
+                  ));
+                  const jasaParamedis = Math.round(hitungJasaPerorangan(
+                    hasil.totalJasaParamedis, nakes.jasaPerTindakan, totalJasaProduksiUnit, nakes.totalTindakan
+                  ));
+                  const jasaPenunjang = Math.round(hitungJasaPerorangan(
+                    hasil.totalJasaPenunjang, nakes.jasaPerTindakan, totalJasaProduksiUnit, nakes.totalTindakan
+                  ));
+                  const bonusPrestasi = 0;
+                  const totalJasaKotor = jasaMedis + jasaParamedis + jasaPenunjang + bonusPrestasi;
+                  const pajakPPh = Math.round(totalJasaKotor * 0.05);
+                  const iuranBPJS = 0;
+                  const potonganLain = 0;
+                  const totalPotongan = pajakPPh + iuranBPJS + potonganLain;
+                  const nettoDibayar = totalJasaKotor - totalPotongan;
+
+                  const pembayaran = {
+                    id: `BYR-${ts}-${nakes.id}`,
+                    periode: hasil.periode,
+                    nakesId: nakes.id,
+                    nakesNama: nakes.nama,
+                    nip: nakes.nip || '',
+                    jabatan: nakes.jabatan,
+                    unit: nakes.unit,
+                    noRekening: '',
+                    bank: '',
+                    jasaMedis,
+                    jasaParamedis,
+                    jasaPenunjang,
+                    bonusPrestasi,
+                    totalJasaKotor,
+                    pajakPPh,
+                    iuranBPJS,
+                    potonganLain,
+                    totalPotongan,
+                    nettoDibayar,
+                    status: 'draft',
+                    tanggalFinalisasi: null,
+                    tanggalPersetujuan: null,
+                    tanggalPembayaran: null,
+                    noBukti: null,
+                    catatan: '',
+                  };
+                  await dataService.savePembayaran(pembayaran);
+                  nPembayaran++;
+                }
               }
-              showToast('success', 'Pembayaran Digenerate', `${filtered.length} draft pembayaran telah dibuat. Lanjutkan ke halaman Output Pembayaran untuk finalisasi.`);
+
+              showToast('success', 'Pembayaran & Approval Digenerate', `${nPembayaran} pembayaran draft dan ${nApproval} approval item telah dibuat. Lanjutkan ke halaman Output Pembayaran untuk finalisasi.`);
             } catch (e) {
-              showToast('warning', 'Updated locally only', 'Failed to sync to database');
+              showToast('warning', 'Partial Sync Warning', 'Some records failed to sync to database. Check the Pembayaran and Approval pages for completeness.');
             }
           }}
           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg shadow-md"

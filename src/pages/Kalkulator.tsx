@@ -4,6 +4,7 @@ import { hitungRemunerasi } from '../utils/helpers';
 import { formatRupiah } from '../utils/helpers';
 import { exportToExcel, exportToPDF } from '../utils/exporters';
 import { useApp } from '../context/AppContext';
+import dataService from '../data/dataService';
 
 export default function KalkulatorPage() {
   const { settings, showToast, updateSettings } = useApp();
@@ -67,6 +68,53 @@ export default function KalkulatorPage() {
       pajakPPh: pajak,
     });
     showToast('success', 'Konfigurasi disimpan', 'Persentase ini menjadi default sistem');
+  };
+
+  const handleSaveToHasil = async () => {
+    if (!valid) {
+      showToast('error', 'Total persentase harus 100%', `Saat ini: ${totalPersentase}%`);
+      return;
+    }
+
+    const units = ['Poli Umum', 'Poli Gigi', 'Laboratorium', 'Radiologi', 'Farmasi', 'ICU', 'UGD', 'Rehab Medik'];
+    const periode = settings.periode;
+    const pendapatanPerUnit = Math.round(hasil.totalPendapatan / units.length);
+
+    try {
+      const timestamp = Date.now();
+      for (let i = 0; i < units.length; i++) {
+        const unitResult = hitungRemunerasi({
+          totalPendapatan: pendapatanPerUnit,
+          persentaseBebanOperasional: bebanOp,
+          persentaseJasaMedis: jasaMedis,
+          persentaseJasaParamedis: jasaParamedis,
+          persentaseJasaPenunjang: jasaPenunjang,
+          persentaseBonus: bonus,
+          persentasePajak: pajak,
+        });
+
+        const record = {
+          id: `HSL-${timestamp}-${i}`,
+          periode,
+          unit: units[i],
+          totalPendapatan: pendapatanPerUnit,
+          totalBeban: unitResult.totalBeban,
+          totalJasaMedis: unitResult.totalJasaMedis,
+          totalJasaParamedis: unitResult.totalJasaParamedis,
+          totalJasaPenunjang: unitResult.totalJasaPenunjang,
+          bonusPrestasi: unitResult.bonusPrestasi,
+          pajak: unitResult.pajak,
+          netto: unitResult.netto,
+          status: 'draft',
+        };
+
+        await dataService.updateHasilKalkulasi(record);
+      }
+
+      showToast('success', 'Hasil tersimpan', '8 unit hasil kalkulasi telah disimpan sebagai draft. Buka halaman Hasil Kalkulasi untuk melihat.');
+    } catch (err) {
+      showToast('error', 'Gagal menyimpan', `Terjadi kesalahan: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const exportData = [
@@ -340,7 +388,7 @@ export default function KalkulatorPage() {
           {/* Actions */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200">
             <h3 className="font-bold text-slate-800 mb-3">Aksi & Ekspor Hasil</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <button
                 onClick={handleExportExcel}
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-100 text-sm font-semibold transition"
@@ -363,9 +411,17 @@ export default function KalkulatorPage() {
                 <Save className="w-5 h-5" />
                 Jadikan Default
               </button>
+              <button
+                onClick={handleSaveToHasil}
+                disabled={!valid}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-semibold transition"
+              >
+                <Save className="w-5 h-5" />
+                Simpan ke Hasil
+              </button>
             </div>
             <p className="text-[10px] text-slate-400 mt-3 text-center">
-              "Jadikan Default" akan menyimpan konfigurasi persentase ke pengaturan sistem
+              "Simpan ke Hasil" menyimpan hasil kalkulasi per unit ke database sebagai draft · "Jadikan Default" menyimpan konfigurasi persentase ke pengaturan sistem
             </p>
           </div>
         </div>

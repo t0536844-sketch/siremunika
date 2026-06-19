@@ -696,7 +696,7 @@ export default function ManajemenUser() {
                             </td>
                             {roles.map((r) => (
                               <td key={r.id} className="px-3 py-2.5 text-center">
-                                {r.permissions.includes(perm.key as PermissionKey)
+                                {(r.permissions || []).includes(perm.key as PermissionKey)
                                   ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto" />
                                   : <XCircle className="w-4 h-4 text-slate-200 mx-auto" />}
                               </td>

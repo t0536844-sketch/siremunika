@@ -63,23 +63,23 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
 
     // Pages
     pageMap.forEach((p) => {
-      if (p.label.toLowerCase().includes(q)) {
+      if ((p.label || '').toLowerCase().includes(q)) {
         out.push({ id: p.id, type: 'Halaman', page: p.id, title: p.label, subtitle: 'Navigasi', icon: p.icon, color: p.color });
       }
     });
 
     // Pendapatan
     dataPendapatan
-      .filter((d) => d.unit.toLowerCase().includes(q) || d.id.toLowerCase().includes(q) || d.operator.toLowerCase().includes(q))
+      .filter((d) => (d.unit || '').toLowerCase().includes(q) || (d.id || '').toLowerCase().includes(q) || (d.operator || '').toLowerCase().includes(q))
       .slice(0, 5)
       .forEach((d) => {
         out.push({
           id: d.id,
           type: 'Pendapatan',
           page: 'pendapatan',
-          title: `${d.unit} - ${d.jenisPelayanan}`,
-          subtitle: `${d.operator} · ${d.id}`,
-          meta: formatRupiah(d.nilaiPendapatan),
+          title: `${d.unit || ''} - ${d.jenisPelayanan || ''}`,
+          subtitle: `${d.operator || ''} · ${d.id || ''}`,
+          meta: formatRupiah(d.nilaiPendapatan || 0),
           icon: Wallet,
           color: 'text-teal-600',
         });
@@ -87,16 +87,16 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
 
     // Jasa
     dataJasa
-      .filter((d) => d.nakes.toLowerCase().includes(q) || d.unit.toLowerCase().includes(q) || d.jabatan.toLowerCase().includes(q))
+      .filter((d) => (d.nakes || '').toLowerCase().includes(q) || (d.unit || '').toLowerCase().includes(q) || (d.jabatan || '').toLowerCase().includes(q))
       .slice(0, 5)
       .forEach((d) => {
         out.push({
           id: d.id,
           type: 'Jasa Medis',
           page: 'jasa',
-          title: d.nakes,
-          subtitle: `${d.jabatan} · ${d.unit}`,
-          meta: formatRupiah(d.totalJasa),
+          title: d.nakes || '',
+          subtitle: `${d.jabatan || ''} · ${d.unit || ''}`,
+          meta: formatRupiah(d.totalJasa || 0),
           icon: Stethoscope,
           color: 'text-cyan-600',
         });
@@ -104,16 +104,16 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
 
     // Indexing
     dataIndexing
-      .filter((d) => d.namaIndex.toLowerCase().includes(q) || d.kodeIndex.toLowerCase().includes(q))
+      .filter((d) => (d.namaIndex || '').toLowerCase().includes(q) || (d.kodeIndex || '').toLowerCase().includes(q))
       .slice(0, 5)
       .forEach((d) => {
         out.push({
           id: d.id,
           type: 'Index',
           page: 'indexing',
-          title: d.namaIndex,
-          subtitle: `${d.kategori} · ${d.kodeIndex}`,
-          meta: `Bobot ${d.bobot.toFixed(2)}`,
+          title: d.namaIndex || '',
+          subtitle: `${d.kategori || ''} · ${d.kodeIndex || ''}`,
+          meta: `Bobot ${(d.bobot ?? 0).toFixed(2)}`,
           icon: BarChart3,
           color: 'text-indigo-600',
         });
@@ -121,16 +121,16 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
 
     // Hasil
     dataHasil
-      .filter((d) => d.unit.toLowerCase().includes(q) || d.periode.toLowerCase().includes(q))
+      .filter((d) => (d.unit || '').toLowerCase().includes(q) || (d.periode || '').toLowerCase().includes(q))
       .slice(0, 3)
       .forEach((d) => {
         out.push({
           id: d.id,
           type: 'Hasil',
           page: 'hasil',
-          title: `${d.unit} - ${d.periode}`,
-          subtitle: `Status: ${d.status}`,
-          meta: formatRupiah(d.netto),
+          title: `${d.unit || ''} - ${d.periode || ''}`,
+          subtitle: `Status: ${d.status || 'pending'}`,
+          meta: formatRupiah(d.netto || 0),
           icon: FileBarChart2,
           color: 'text-emerald-600',
         });
@@ -138,16 +138,16 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
 
     // Approval
     dataApproval
-      .filter((d) => d.referensi.toLowerCase().includes(q) || d.pengaju.toLowerCase().includes(q))
+      .filter((d) => (d.referensi || '').toLowerCase().includes(q) || (d.pengaju || '').toLowerCase().includes(q))
       .slice(0, 3)
       .forEach((d) => {
         out.push({
           id: d.id,
           type: 'Approval',
           page: 'approval',
-          title: d.referensi,
-          subtitle: `${d.pengaju} · ${d.level}`,
-          meta: formatRupiah(d.nilai),
+          title: d.referensi || '',
+          subtitle: `${d.pengaju || ''} · ${d.level || ''}`,
+          meta: formatRupiah(d.nilai || 0),
           icon: ClipboardCheck,
           color: 'text-rose-600',
         });

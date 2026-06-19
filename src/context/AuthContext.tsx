@@ -230,17 +230,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Permission checker ─────────────────────────────────────────
   const can = useCallback(
-    (permission: PermissionKey) => session?.role.permissions.includes(permission) ?? false,
+    (permission: PermissionKey) => (session?.role?.permissions || []).includes(permission) ?? false,
     [session]
   );
 
   const canAny = useCallback(
-    (permissions: PermissionKey[]) => permissions.some((p) => session?.role.permissions.includes(p) ?? false),
+    (permissions: PermissionKey[]) => permissions.some((p) => (session?.role?.permissions || []).includes(p)),
     [session]
   );
 
   const canAll = useCallback(
-    (permissions: PermissionKey[]) => permissions.every((p) => session?.role.permissions.includes(p) ?? false),
+    (permissions: PermissionKey[]) => permissions.every((p) => (session?.role?.permissions || []).includes(p)),
     [session]
   );
 

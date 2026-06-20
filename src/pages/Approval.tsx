@@ -44,6 +44,7 @@ const tipeColor: Record<string, string> = {
   pendapatan: 'from-teal-500 to-teal-700',
   jasa:       'from-cyan-500 to-cyan-700',
   hasil:      'from-indigo-500 to-indigo-700',
+  hasil_kalkulasi: 'from-indigo-500 to-indigo-700',
 };
 
 // ─── Error Boundary untuk detail modal ────────────────────────
@@ -110,7 +111,7 @@ function getRelatedDetail(item: ApprovalItem, allPendapatan: Pendapatan[], allJa
       ],
     };
   }
-  if (item.tipe === 'hasil') {
+  if (item.tipe === 'hasil' || item.tipe === 'hasil_kalkulasi') {
     const d = allHasil.find((h) => h.id === item.referensi);
     if (!d) return null;
     return {
@@ -145,20 +146,20 @@ export default function Approval() {
 
   useEffect(() => {
     dataService.getApproval()
-      .then((data) => { if (data && data.length > 0) setItems(data.map((a: any) => ({ ...a }))); })
+      .then((data) => { setItems(data && data.length > 0 ? data.map((a: any) => ({ ...a })) : dataApproval.map((a) => ({ ...a }))); })
       .catch(() => { setItems(dataApproval.map((a) => ({ ...a }))); });
 
     dataService.getPendapatan()
-      .then((d) => { if (d && d.length > 0) setDataPendapatan(d); })
-      .catch(() => {});
+      .then((d) => { setDataPendapatan(d && d.length > 0 ? d : dataPendapatan); })
+      .catch(() => { setDataPendapatan(dataPendapatan); });
 
     dataService.getJasaMedis()
-      .then((d) => { if (d && d.length > 0) setDataJasa(d); })
-      .catch(() => {});
+      .then((d) => { setDataJasa(d && d.length > 0 ? d : dataJasaMedis); })
+      .catch(() => { setDataJasa(dataJasaMedis); });
 
     dataService.getHasilKalkulasi()
-      .then((d) => { if (d && d.length > 0) setDataHasil(d); })
-      .catch(() => {});
+      .then((d) => { setDataHasil(d && d.length > 0 ? d : dataHasil); })
+      .catch(() => { setDataHasil(dataHasil); });
   }, []);
   const [search, setSearch]                     = useState('');
   const [filterTipe, setFilterTipe]             = useState('Semua');
@@ -470,14 +471,14 @@ export default function Approval() {
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1.5 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
                       Disetujui oleh <b>{item.approvedBy}</b>
-                      {item.approvedAt && ` pada ${formatDateShort(item.approvedAt.split('T')[0])}`}
+                      {item.approvedAt && ` pada ${formatDateShort((item.approvedAt || '').split('T')[0])}`}
                     </p>
                   )}
                   {item.rejectedBy && (
                     <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1.5 flex items-center gap-1">
                       <XCircle className="w-3 h-3" />
                       Ditolak oleh <b>{item.rejectedBy}</b>
-                      {item.rejectedAt && ` pada ${formatDateShort(item.rejectedAt.split('T')[0])}`}
+                      {item.rejectedAt && ` pada ${formatDateShort((item.rejectedAt || '').split('T')[0])}`}
                       {item.alasanTolak && ` — "${item.alasanTolak}"`}
                     </p>
                   )}
@@ -637,7 +638,7 @@ export default function Approval() {
                   </p>
                   <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
                     Oleh: <b>{detailItem.approvedBy ?? detailItem.rejectedBy}</b>
-                    {(detailItem.approvedAt || detailItem.rejectedAt) && ` · ${formatDateShort((detailItem.approvedAt ?? detailItem.rejectedAt ?? '').split('T')[0])}`}
+                    {(detailItem.approvedAt || detailItem.rejectedAt) && ` · ${formatDateShort(((detailItem.approvedAt || detailItem.rejectedAt) || '').split('T')[0])}`}
                   </p>
                   {detailItem.alasanTolak && (
                     <p className="text-xs text-rose-600 dark:text-rose-400 mt-1 italic">Alasan: "{detailItem.alasanTolak}"</p>

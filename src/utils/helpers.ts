@@ -12,7 +12,9 @@ export const formatNumber = (nilai: number): string => {
 };
 
 export const formatDate = (tanggal: string): string => {
+  if (!tanggal) return '-';
   const d = new Date(tanggal);
+  if (isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -21,7 +23,9 @@ export const formatDate = (tanggal: string): string => {
 };
 
 export const formatDateShort = (tanggal: string): string => {
+  if (!tanggal) return '-';
   const d = new Date(tanggal);
+  if (isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('id-ID', {
     day: '2-digit',
     month: '2-digit',

@@ -50,7 +50,7 @@ export interface HasilKalkulasi {
 
 export interface ApprovalItem {
   id: string;
-  tipe: 'pendapatan' | 'jasa' | 'hasil';
+  tipe: 'pendapatan' | 'jasa' | 'hasil' | 'hasil_kalkulasi';
   referensi: string;
   nilai: number;
   pengaju: string;

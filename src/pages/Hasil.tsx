@@ -24,7 +24,7 @@ export default function Hasil() {
   const [items, setItems] = useState<HasilKalkulasi[]>([]);
   useEffect(() => {
     dataService.getHasilKalkulasi().then((data) => {
-      if (data && data.length > 0) setItems(data);
+      setItems(data && data.length > 0 ? data : dataHasil);
     }).catch(() => { setItems(dataHasil); });
   }, []);
   const [filterStatus, setFilterStatus] = useState('Semua');

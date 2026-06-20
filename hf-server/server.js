@@ -439,9 +439,9 @@ app.patch('/api/nakes/:id/toggle-status', async (req, res) => {
 app.post('/api/pembayaran', async (req, res) => {
   try {
     const d = req.body;
-    if (!d.id) return res.status(400).json({ ok: false, error: 'id required' });
-    await sbUpdate('pembayaran', d.id, d);
-    res.json({ ok: true });
+    if (!d.id) d.id = `BYR-${uuidv4().slice(0,8)}`;
+    await sbUpsert('pembayaran', [d]);
+    res.json({ ok: true, id: d.id });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

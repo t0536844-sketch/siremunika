@@ -40,7 +40,7 @@ export default function OutputPembayaran() {
   const [items, setItems] = useState<Pembayaran[]>([]);
   useEffect(() => {
     dataService.getPembayaran().then((data) => {
-      if (data && data.length > 0) setItems(data);
+      setItems(data && data.length > 0 ? data : dataPembayaran);
     }).catch(() => { setItems(dataPembayaran); });
   }, []);
   const [search, setSearch] = useState('');

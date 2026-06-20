@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { Download, FileSpreadsheet, FileText, Eye, Filter, CheckCircle2, FileX, Clock, Printer, Banknote, Zap, Undo2, CheckSquare, Square } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Eye, Filter, CheckCircle2, FileX, Clock, Printer, Banknote, Zap, Undo2, CheckSquare, Square, Trash2 } from 'lucide-react';
 import { dataHasil } from '../data/mockData';
 import { formatRupiah, statusColors, statusLabel, hitungJasaPerorangan } from '../utils/helpers';
 import type { HasilKalkulasi } from '../data/mockData';
@@ -379,6 +379,33 @@ export default function Hasil() {
         >
           <Undo2 className="w-4 h-4" />
           Reset All
+        </button>
+        <button
+          onClick={async () => {
+            if (selectedIds.size === 0) {
+              showToast('info', 'Tidak Ada Unit Terpilih', 'Pilih unit yang ingin dihapus menggunakan checkbox.');
+              return;
+            }
+            const deletable = selectedItems;
+            if (!confirm(`Hapus ${deletable.length} hasil kalkulasi secara permanen? Data tidak dapat dikembalikan.`)) return;
+            const remaining = items.filter((i) => !selectedIds.has(i.id));
+            setItems(remaining);
+            const idsToDelete = [...selectedIds];
+            setSelectedIds(new Set());
+            try {
+              for (const id of idsToDelete) {
+                await dataService.deleteHasilKalkulasi(id);
+              }
+              showToast('success', `${deletable.length} data dihapus`, 'Hasil kalkulasi telah dihapus permanen');
+            } catch (e) {
+              showToast('warning', 'Partial Delete', 'Some deletions failed to sync to database');
+            }
+          }}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100"
+          title="Hapus semua unit terpilih secara permanen"
+        >
+          <Trash2 className="w-4 h-4" />
+          Delete
         </button>
         <button
           onClick={() => setActivePage('pembayaran')}

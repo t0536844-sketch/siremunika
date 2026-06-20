@@ -391,6 +391,13 @@ app.post('/api/approval', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+app.delete('/api/approval/:id', async (req, res) => {
+  try {
+    await sbDelete('approval', req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── CRUD: Hasil Kalkulasi ───────────────────────────────────────
 app.post('/api/hasil-kalkulasi', async (req, res) => {
   try {

@@ -288,6 +288,10 @@ export const dataService = {
     });
   },
 
+  async deleteApproval(id: string): Promise<any> {
+    return apiFetch(`/api/approval/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
   // ─── Hasil Kalkulasi ──────────────────────────────────────────
   async updateHasilKalkulasi(item: any): Promise<any> {
     return apiFetch('/api/hasil-kalkulasi', {

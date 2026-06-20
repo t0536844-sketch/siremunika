@@ -5,6 +5,7 @@ import {
   Stethoscope, BarChart3, Search, ShieldCheck, X,
   Eye, Shield, Loader2, ThumbsUp, ThumbsDown,
   CalendarDays, Hash, DollarSign, ArrowUpRight, Undo2,
+  CheckSquare, Square, Trash2,
 } from 'lucide-react';
 import { dataApproval, dataPendapatan as mockPendapatan, dataJasa as mockJasa, dataHasil as mockHasil } from '../data/mockData';
 import { formatRupiah, formatDateShort, formatDate, statusColors, statusLabel } from '../utils/helpers';
@@ -165,6 +166,7 @@ export default function Approval() {
   const [filterTipe, setFilterTipe]             = useState('Semua');
   const [filterLevel, setFilterLevel]           = useState('Semua');
   const [filterStatus, setFilterStatus]         = useState('Semua');
+  const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set());
 
   // Modal state
   const [detailItem, setDetailItem]             = useState<ApprovalItemExt | null>(null);
@@ -182,6 +184,20 @@ export default function Approval() {
        (item.pengaju || '').toLowerCase().includes(search.toLowerCase()) ||
        (item.catatan || '').toLowerCase().includes(search.toLowerCase()))
   ), [items, filterTipe, filterLevel, filterStatus, search]);
+
+  // ── Selection helpers ────────────────────────────────────────
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedIds(new Set(filtered.map(i => i.id)));
+  const unselectAll = () => setSelectedIds(new Set());
+  const selectedItems = filtered.filter(i => selectedIds.has(i.id));
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
 
   // ── Stats ────────────────────────────────────────────────────
   const totalPending  = items.filter((i) => i.status === 'pending').length;
@@ -395,6 +411,66 @@ export default function Approval() {
             className="bg-transparent text-sm focus:outline-none w-full text-slate-700 dark:text-slate-300 placeholder:text-slate-400" />
           {search && <button onClick={() => setSearch('')}><X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-700" /></button>}
         </div>
+        <button
+          onClick={selectAll}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100"
+          title="Pilih semua pengajuan yang tampil"
+        >
+          <CheckSquare className="w-4 h-4" />
+          Select All
+        </button>
+        <button
+          onClick={unselectAll}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100"
+          title="Batalkan semua pilihan"
+        >
+          <Square className="w-4 h-4" />
+          Unselect All
+        </button>
+        {selectedIds.size > 0 && (
+          <span className="text-xs font-medium text-slate-500">{selectedIds.size} dipilih</span>
+        )}
+        {selectedIds.size > 0 && (
+          <button
+            onClick={async () => {
+              const resetable = selectedItems.filter((i) => i.status !== 'pending');
+              if (resetable.length === 0) {
+                showToast('info', 'Tidak Ada untuk Reset', 'Pilih item dengan status selain Menunggu.');
+                return;
+              }
+              if (!confirm(`Reset ${resetable.length} pengajuan kembali ke Menunggu?`)) return;
+              setItems(prev => prev.map(i => selectedIds.has(i.id) && i.status !== 'pending' ? { ...i, status: 'pending' as const, approvedBy: undefined, approvedAt: undefined, rejectedBy: undefined, rejectedAt: undefined, alasanTolak: undefined } : i));
+              setSelectedIds(new Set());
+              try {
+                for (const r of resetable) await dataService.updateApproval({ id: r.id, status: 'pending' });
+                showToast('success', `${resetable.length} di-reset`, 'Status kembali ke Menunggu');
+              } catch { showToast('warning', 'Partial Sync', 'Some resets failed'); }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
+            title="Reset semua terpilih kembali ke Menunggu"
+          >
+            <Undo2 className="w-4 h-4" /> Reset All
+          </button>
+        )}
+        {selectedIds.size > 0 && (
+          <button
+            onClick={async () => {
+              if (!confirm(`Hapus ${selectedIds.size} pengajuan secara permanen?`)) return;
+              const remaining = items.filter(i => !selectedIds.has(i.id));
+              setItems(remaining);
+              const idsToDelete = [...selectedIds];
+              setSelectedIds(new Set());
+              try {
+                for (const id of idsToDelete) await dataService.deleteApproval(id);
+                showToast('success', `${idsToDelete.length} dihapus`, 'Pengajuan telah dihapus permanen');
+              } catch { showToast('warning', 'Partial Delete', 'Some deletions failed'); }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100"
+            title="Hapus semua terpilih secara permanen"
+          >
+            <Trash2 className="w-4 h-4" /> Delete
+          </button>
+        )}
         {totalPending > 0 && (
           <button onClick={approveAll}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition">
@@ -418,6 +494,7 @@ export default function Approval() {
           return (
             <div key={item.id}
               className={`bg-white dark:bg-slate-800 rounded-2xl border overflow-hidden transition-all hover:shadow-md ${
+                selectedIds.has(item.id) ? 'ring-2 ring-teal-400 border-teal-200' :
                 item.status === 'pending'
                   ? 'border-amber-200 dark:border-amber-700 shadow-sm'
                   : item.status === 'approved'
@@ -426,6 +503,13 @@ export default function Approval() {
               }`}
             >
               <div className="p-5 flex flex-wrap items-center gap-4">
+                {/* Checkbox */}
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(item.id)}
+                  onChange={() => toggleSelect(item.id)}
+                  className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer flex-shrink-0"
+                />
                 {/* Icon */}
                 <div className={`w-14 h-14 bg-gradient-to-br ${tipeColor[item.tipe]} text-white rounded-2xl flex items-center justify-center flex-shrink-0 shadow-md`}>
                   <TipeIcon className="w-7 h-7" />

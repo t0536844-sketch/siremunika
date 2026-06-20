@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { Download, FileSpreadsheet, FileText, Eye, Filter, CheckCircle2, FileX, Clock, Printer, Banknote, Zap } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Eye, Filter, CheckCircle2, FileX, Clock, Printer, Banknote, Zap, Undo2 } from 'lucide-react';
 import { dataHasil } from '../data/mockData';
 import { formatRupiah, statusColors, statusLabel, hitungJasaPerorangan } from '../utils/helpers';
 import type { HasilKalkulasi } from '../data/mockData';
@@ -69,6 +69,28 @@ export default function Hasil() {
       showToast('success', 'Data difinalisasi', 'Status berubah menjadi final');
     } catch (e) {
       showToast('warning', 'Updated locally only', 'Failed to sync to database');
+    }
+  };
+
+  const handleReset = async (id: string) => {
+    if (!confirm('Reset hasil ini kembali ke draft? Data yang sudah di-finalisasi akan dikembalikan ke status draft.')) return;
+    setItems(items.map((i) => (i.id === id ? { ...i, status: 'draft' as const } : i)));
+    try {
+      await dataService.updateHasilKalkulasi({ id, status: 'draft' });
+      showToast('success', 'Data di-reset', 'Status kembali ke draft');
+    } catch (e) {
+      showToast('warning', 'Updated locally only', 'Failed to sync to database');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Hapus hasil kalkulasi ini? Data akan dihapus permanen dari database.')) return;
+    setItems(items.filter((i) => i.id !== id));
+    try {
+      await dataService.deleteHasilKalkulasi(id);
+      showToast('success', 'Data dihapus', 'Hasil kalkulasi telah dihapus');
+    } catch (e) {
+      showToast('warning', 'Deleted locally only', 'Failed to sync to database');
     }
   };
 
@@ -366,6 +388,22 @@ export default function Hasil() {
                             <CheckCircle2 className="w-4 h-4" />
                           </button>
                         )}
+                        {(item.status === 'final' || item.status === 'approved') && (
+                          <button
+                            onClick={() => handleReset(item.id)}
+                            className="p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-lg"
+                            title="Reset ke Draft"
+                          >
+                            <Undo2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-lg"
+                          title="Hapus"
+                        >
+                          <FileX className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>

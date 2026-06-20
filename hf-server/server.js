@@ -401,6 +401,13 @@ app.post('/api/hasil-kalkulasi', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+app.delete('/api/hasil-kalkulasi/:id', async (req, res) => {
+  try {
+    await sbDelete('hasil_kalkulasi', req.params.id);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── CRUD: Nakes ─────────────────────────────────────────────────
 app.post('/api/nakes', async (req, res) => {
   try {

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Calculator, RefreshCw, FileSpreadsheet, FileText, Info, TrendingUp, DollarSign, PieChart, Check, Save } from 'lucide-react';
+import { Calculator, RefreshCw, FileSpreadsheet, FileText, Info, TrendingUp, DollarSign, PieChart, Check, Save, Users } from 'lucide-react';
 import { hitungRemunerasi } from '../utils/helpers';
 import { formatRupiah } from '../utils/helpers';
 import { exportToExcel, exportToPDF } from '../utils/exporters';
@@ -15,6 +15,39 @@ export default function KalkulatorPage() {
   const [jasaPenunjang, setJasaPenunjang] = useState(settings.jasaPenunjang);
   const [bonus, setBonus] = useState(settings.bonusPrestasi);
   const [pajak, setPajak] = useState(settings.pajakPPh);
+
+  // Per-unit pendapatan data (loaded from Pendapatan module)
+  const [unitPendapatan, setUnitPendapatan] = useState<{ unit: string; totalPendapatan: number }[]>([]);
+
+  // Load real pendapatan data per unit
+  useEffect(() => {
+    const loadPendapatan = async () => {
+      try {
+        const data = await dataService.getPendapatan();
+        // Aggregate pendapatan per unit
+        const byUnit: Record<string, number> = {};
+        for (const p of data) {
+          const unit = p.unit || p.jenisPelayanan || '';
+          if (!unit) continue;
+          byUnit[unit] = (byUnit[unit] || 0) + (p.nilaiPendapatan || 0);
+        }
+        const entries = Object.entries(byUnit).map(([unit, total]) => ({ unit, totalPendapatan: total }));
+        if (entries.length > 0) {
+          setUnitPendapatan(entries);
+          const grandTotal = entries.reduce((s, e) => s + e.totalPendapatan, 0);
+          if (grandTotal > 0) setPendapatan(grandTotal);
+        }
+      } catch {
+        // Fallback: use equal distribution across official units
+        const units = ['Poli Umum', 'IGD', 'Poli Bedah', 'Poli Gigi', 'Poli Anak',
+          'Poli Penyakit Dalam', 'Kamar Bersalin', 'Kamar Perawatan',
+          'Laboratorium', 'Radiologi', 'Farmasi', 'Rehabilitasi Medis'];
+        const perUnit = Math.round(pendapatan / units.length);
+        setUnitPendapatan(units.map(u => ({ unit: u, totalPendapatan: perUnit })));
+      }
+    };
+    loadPendapatan();
+  }, []);
 
   // Sync with settings
   useEffect(() => {
@@ -75,16 +108,20 @@ export default function KalkulatorPage() {
       showToast('error', 'Total persentase harus 100%', `Saat ini: ${totalPersentase}%`);
       return;
     }
+    if (unitPendapatan.length === 0) {
+      showToast('error', 'Data Pendapatan Kosong', 'Tidak ada data pendapatan per unit. Input data pendapatan terlebih dahulu.');
+      return;
+    }
 
-    const units = ['Poli Umum', 'Poli Gigi', 'Laboratorium', 'Radiologi', 'Farmasi', 'ICU', 'UGD', 'Rehab Medik'];
     const periode = settings.periode;
-    const pendapatanPerUnit = Math.round(hasil.totalPendapatan / units.length);
 
     try {
       const timestamp = Date.now();
-      for (let i = 0; i < units.length; i++) {
+      for (let i = 0; i < unitPendapatan.length; i++) {
+        const { unit, totalPendapatan: unitPendapatanVal } = unitPendapatan[i];
+
         const unitResult = hitungRemunerasi({
-          totalPendapatan: pendapatanPerUnit,
+          totalPendapatan: unitPendapatanVal,
           persentaseBebanOperasional: bebanOp,
           persentaseJasaMedis: jasaMedis,
           persentaseJasaParamedis: jasaParamedis,
@@ -96,8 +133,8 @@ export default function KalkulatorPage() {
         const record = {
           id: `HSL-${timestamp}-${i}`,
           periode,
-          unit: units[i],
-          totalPendapatan: pendapatanPerUnit,
+          unit,
+          totalPendapatan: unitPendapatanVal,
           totalBeban: unitResult.totalBeban,
           totalJasaMedis: unitResult.totalJasaMedis,
           totalJasaParamedis: unitResult.totalJasaParamedis,
@@ -111,7 +148,7 @@ export default function KalkulatorPage() {
         await dataService.updateHasilKalkulasi(record);
       }
 
-      showToast('success', 'Hasil tersimpan', '8 unit hasil kalkulasi telah disimpan sebagai draft. Buka halaman Hasil Kalkulasi untuk melihat.');
+      showToast('success', 'Hasil tersimpan', `${unitPendapatan.length} unit hasil kalkulasi telah disimpan sebagai draft. Buka halaman Hasil Kalkulasi untuk melihat.`);
     } catch (err) {
       showToast('error', 'Gagal menyimpan', `Terjadi kesalahan: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -384,6 +421,59 @@ export default function KalkulatorPage() {
               ))}
             </div>
           </div>
+
+          {/* Per-unit preview — shows exactly what will be saved to Hasil Kalkulasi */}
+          {unitPendapatan.length > 0 && (
+            <div className="bg-white rounded-2xl p-5 border border-slate-200">
+              <div className="flex items-center gap-2 mb-4">
+                <Users className="w-5 h-5 text-teal-600" />
+                <h3 className="font-bold text-slate-800">Preview per Unit</h3>
+                <span className="text-xs text-slate-500 ml-auto">{unitPendapatan.length} unit · data pendapatan aktual</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600 text-xs uppercase border-b border-slate-200">
+                      <th className="px-4 py-2.5 text-left font-semibold">Unit</th>
+                      <th className="px-4 py-2.5 text-right font-semibold">Pendapatan</th>
+                      <th className="px-4 py-2.5 text-right font-semibold">Jasa Medis</th>
+                      <th className="px-4 py-2.5 text-right font-semibold">Jasa Paramedis</th>
+                      <th className="px-4 py-2.5 text-right font-semibold">Jasa Penunjang</th>
+                      <th className="px-4 py-2.5 text-right font-semibold">Bonus</th>
+                      <th className="px-4 py-2.5 text-right font-semibold">Netto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unitPendapatan.map(({ unit, totalPendapatan: val }) => {
+                      const r = hitungRemunerasi({
+                        totalPendapatan: val,
+                        persentaseBebanOperasional: bebanOp,
+                        persentaseJasaMedis: jasaMedis,
+                        persentaseJasaParamedis: jasaParamedis,
+                        persentaseJasaPenunjang: jasaPenunjang,
+                        persentaseBonus: bonus,
+                        persentasePajak: pajak,
+                      });
+                      return (
+                        <tr key={unit} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-4 py-2.5 font-medium text-slate-800">{unit}</td>
+                          <td className="px-4 py-2.5 text-right text-slate-600">{formatRupiah(val)}</td>
+                          <td className="px-4 py-2.5 text-right text-teal-700 font-medium">{formatRupiah(r.totalJasaMedis)}</td>
+                          <td className="px-4 py-2.5 text-right text-cyan-700 font-medium">{formatRupiah(r.totalJasaParamedis)}</td>
+                          <td className="px-4 py-2.5 text-right text-amber-700 font-medium">{formatRupiah(r.totalJasaPenunjang)}</td>
+                          <td className="px-4 py-2.5 text-right text-emerald-700 font-medium">{formatRupiah(r.bonusPrestasi)}</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-slate-800">{formatRupiah(r.netto)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10px] text-teal-600 mt-2 text-center">
+                Tabel ini menunjukkan hasil kalkulasi yang akan disimpan ke "Hasil Kalkulasi" per unit berdasarkan data pendapatan aktual
+              </p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200">

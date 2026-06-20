@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { Download, FileSpreadsheet, FileText, Eye, Filter, CheckCircle2, FileX, Clock, Printer, Banknote, Zap, Undo2 } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Eye, Filter, CheckCircle2, FileX, Clock, Printer, Banknote, Zap, Undo2, CheckSquare, Square } from 'lucide-react';
 import { dataHasil } from '../data/mockData';
 import { formatRupiah, statusColors, statusLabel, hitungJasaPerorangan } from '../utils/helpers';
 import type { HasilKalkulasi } from '../data/mockData';
@@ -29,6 +29,7 @@ export default function Hasil() {
   }, []);
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [selected, setSelected] = useState<HasilKalkulasi | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const exportColumns = [
     { header: 'Periode', key: 'periode', width: 16 },
@@ -95,6 +96,20 @@ export default function Hasil() {
   };
 
   const filtered = items.filter((item) => filterStatus === 'Semua' || item.status === filterStatus);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedIds(new Set(filtered.map(i => i.id)));
+  const unselectAll = () => setSelectedIds(new Set());
+
+  const selectedItems = filtered.filter(i => selectedIds.has(i.id));
+  const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
 
   const totalNetto = filtered.reduce((s, i) => s + (i.netto || 0), 0);
   const totalPendapatan = filtered.reduce((s, i) => s + (i.totalPendapatan || 0), 0);
@@ -169,7 +184,7 @@ export default function Hasil() {
           <Filter className="w-4 h-4 text-slate-500" />
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
+            onChange={(e) => { setFilterStatus(e.target.value); setSelectedIds(new Set()); }}
             className="bg-transparent text-sm focus:outline-none min-w-[120px]"
           >
             {statusHasil.map((s) => (
@@ -177,6 +192,25 @@ export default function Hasil() {
             ))}
           </select>
         </div>
+        <button
+          onClick={selectAll}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100"
+          title="Pilih semua unit yang tampil"
+        >
+          <CheckSquare className="w-4 h-4" />
+          Select All
+        </button>
+        <button
+          onClick={unselectAll}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100"
+          title="Batalkan semua pilihan"
+        >
+          <Square className="w-4 h-4" />
+          Unselect All
+        </button>
+        {selectedIds.size > 0 && (
+          <span className="text-xs font-medium text-slate-500">{selectedIds.size} unit dipilih</span>
+        )}
         <div className="flex-1"></div>
         <button
           onClick={() => { showToast('info', 'Menyiapkan halaman cetak...'); setTimeout(() => printPage(), 200); }}
@@ -201,7 +235,8 @@ export default function Hasil() {
         </button>
         <button
           onClick={async () => {
-            const unitsToFinalize = filtered.filter((i) => i.status !== 'approved');
+            const targets = selectedIds.size > 0 ? selectedItems : filtered;
+            const unitsToFinalize = targets.filter((i) => i.status !== 'approved');
             if (unitsToFinalize.length === 0) {
               showToast('info', 'Tidak Ada Unit Baru', 'Semua unit sudah approved atau final.');
               return;
@@ -317,6 +352,35 @@ export default function Hasil() {
           Generate Pembayaran
         </button>
         <button
+          onClick={async () => {
+            const targets = selectedIds.size > 0 ? selectedItems : filtered;
+            const resetable = targets.filter((i) => i.status === 'final' || i.status === 'approved');
+            if (resetable.length === 0) {
+              showToast('info', 'Tidak Ada Unit untuk Reset', 'Pilih unit dengan status final/approved.');
+              return;
+            }
+            if (!confirm(`Reset ${resetable.length} unit kembali ke draft?`)) return;
+            const updated = items.map((i) =>
+              resetable.find(r => r.id === i.id) ? { ...i, status: 'draft' as const } : i
+            );
+            setItems(updated);
+            setSelectedIds(new Set());
+            try {
+              for (const r of resetable) {
+                await dataService.updateHasilKalkulasi({ id: r.id, status: 'draft' });
+              }
+              showToast('success', `${resetable.length} unit di-reset`, 'Status kembali ke draft');
+            } catch (e) {
+              showToast('warning', 'Partial Sync', 'Some resets failed to sync');
+            }
+          }}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
+          title="Reset semua unit terpilih kembali ke draft"
+        >
+          <Undo2 className="w-4 h-4" />
+          Reset All
+        </button>
+        <button
           onClick={() => setActivePage('pembayaran')}
           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100"
           title="Buka halaman Output Pembayaran"
@@ -332,6 +396,14 @@ export default function Hasil() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-xs uppercase border-b border-slate-200">
+                <th className="px-3 py-3 text-center font-semibold w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => allSelected ? unselectAll() : selectAll()}
+                    className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                  />
+                </th>
                 <th className="px-5 py-3 text-left font-semibold">Periode</th>
                 <th className="px-5 py-3 text-left font-semibold">Unit</th>
                 <th className="px-5 py-3 text-right font-semibold">Pendapatan</th>
@@ -348,7 +420,15 @@ export default function Hasil() {
               {filtered.map((item) => {
                 const Icon = statusIcon[item.status || 'draft'];
                 return (
-                  <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <tr key={item.id} className={`border-b border-slate-100 hover:bg-slate-50 ${selectedIds.has(item.id) ? 'bg-teal-50/50' : ''}`}>
+                    <td className="px-3 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleSelect(item.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-5 py-3 text-slate-600 text-xs">{item.periode}</td>
                     <td className="px-5 py-3 font-medium text-slate-800">{item.unit}</td>
                     <td className="px-5 py-3 text-right text-slate-600">{formatRupiah(item.totalPendapatan)}</td>

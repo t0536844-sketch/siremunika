@@ -22,11 +22,28 @@ const statusHasil = ['Semua', 'draft', 'final', 'approved'] as const;
 export default function Hasil() {
   const { showToast, setActivePage } = useApp();
   const [items, setItems] = useState<HasilKalkulasi[]>([]);
-  useEffect(() => {
-    dataService.getHasilKalkulasi().then((data) => {
-      setItems(data && data.length > 0 ? data : dataHasil);
-    }).catch(() => { setItems(dataHasil); });
-  }, []);
+
+  const loadFromSupabase = async () => {
+    try {
+      const data = await dataService.getHasilKalkulasi();
+      if (data && data.length > 0) {
+        setItems(data);
+      } else {
+        // No Supabase data — sync mock data to Supabase so IDs are consistent
+        setItems(dataHasil);
+        try {
+          for (const record of dataHasil) {
+            await dataService.updateHasilKalkulasi(record);
+          }
+          // Re-fetch to get Supabase-assigned IDs
+          const synced = await dataService.getHasilKalkulasi();
+          if (synced && synced.length > 0) setItems(synced);
+        } catch { /* keep mock data locally */ }
+      }
+    } catch { setItems(dataHasil); }
+  };
+
+  useEffect(() => { loadFromSupabase(); }, []);
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [selected, setSelected] = useState<HasilKalkulasi | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -64,10 +81,13 @@ export default function Hasil() {
 
   const handleFinalize = async (id: string) => {
     if (!confirm('Finalisasi hasil ini? Setelah final, data tidak dapat diubah.')) return;
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
     setItems(items.map((i) => (i.id === id ? { ...i, status: 'final' as const } : i)));
     try {
-      await dataService.updateHasilKalkulasi({ id, status: 'final' });
+      await dataService.updateHasilKalkulasi({ ...item, status: 'final' });
       showToast('success', 'Data difinalisasi', 'Status berubah menjadi final');
+      loadFromSupabase();
     } catch (e) {
       showToast('warning', 'Updated locally only', 'Failed to sync to database');
     }
@@ -75,10 +95,13 @@ export default function Hasil() {
 
   const handleReset = async (id: string) => {
     if (!confirm('Reset hasil ini kembali ke draft? Data yang sudah di-finalisasi akan dikembalikan ke status draft.')) return;
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
     setItems(items.map((i) => (i.id === id ? { ...i, status: 'draft' as const } : i)));
     try {
-      await dataService.updateHasilKalkulasi({ id, status: 'draft' });
+      await dataService.updateHasilKalkulasi({ ...item, status: 'draft' });
       showToast('success', 'Data di-reset', 'Status kembali ke draft');
+      loadFromSupabase();
     } catch (e) {
       showToast('warning', 'Updated locally only', 'Failed to sync to database');
     }
@@ -90,6 +113,7 @@ export default function Hasil() {
     try {
       await dataService.deleteHasilKalkulasi(id);
       showToast('success', 'Data dihapus', 'Hasil kalkulasi telah dihapus');
+      loadFromSupabase();
     } catch (e) {
       showToast('warning', 'Deleted locally only', 'Failed to sync to database');
     }
@@ -256,8 +280,8 @@ export default function Hasil() {
 
               // Step 1: Finalize hasil items & create approval + pembayaran records
               for (const hasil of unitsToFinalize) {
-                // Finalize hasil status
-                await dataService.updateHasilKalkulasi({ id: hasil.id, status: 'final' });
+                // Finalize hasil status — send FULL record for upsert
+                await dataService.updateHasilKalkulasi({ ...hasil, status: 'final' });
 
                 // Create approval item for this unit
                 const approvalItem = {
@@ -341,8 +365,10 @@ export default function Hasil() {
               }
 
               showToast('success', 'Pembayaran & Approval Digenerate', `${nPembayaran} pembayaran draft dan ${nApproval} approval item telah dibuat. Lanjutkan ke halaman Output Pembayaran untuk finalisasi.`);
+              loadFromSupabase();
             } catch (e) {
               showToast('warning', 'Partial Sync Warning', 'Some records failed to sync to database. Check the Pembayaran and Approval pages for completeness.');
+              loadFromSupabase();
             }
           }}
           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg shadow-md"
@@ -367,11 +393,13 @@ export default function Hasil() {
             setSelectedIds(new Set());
             try {
               for (const r of resetable) {
-                await dataService.updateHasilKalkulasi({ id: r.id, status: 'draft' });
+                await dataService.updateHasilKalkulasi({ ...r, status: 'draft' });
               }
               showToast('success', `${resetable.length} unit di-reset`, 'Status kembali ke draft');
+              loadFromSupabase();
             } catch (e) {
               showToast('warning', 'Partial Sync', 'Some resets failed to sync');
+              loadFromSupabase();
             }
           }}
           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
@@ -397,8 +425,10 @@ export default function Hasil() {
                 await dataService.deleteHasilKalkulasi(id);
               }
               showToast('success', `${deletable.length} data dihapus`, 'Hasil kalkulasi telah dihapus permanen');
+              loadFromSupabase();
             } catch (e) {
               showToast('warning', 'Partial Delete', 'Some deletions failed to sync to database');
+              loadFromSupabase();
             }
           }}
           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100"

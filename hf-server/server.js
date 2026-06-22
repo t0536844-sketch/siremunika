@@ -237,9 +237,27 @@ app.post('/api/auth', async (req, res) => {
       return res.json({ ok: false, error: 'User not found in database' });
     }
     const user = users[0];
-    const roles = await sbSelect('mst_role', '*', `&id=eq.${user.roleId}&limit=1`);
+    // roleId is string ('admin') from INT_TO_ROLE_ID — convert back to integer for mst_role.id lookup
+    const roleIntId = ROLE_ID_TO_INT[user.roleId] || parseInt(user.roleId);
+    const roles = await sbSelect('mst_role', '*', `&id=eq.${roleIntId}&limit=1`);
     const role = roles.length > 0 ? roles[0] : null;
-    res.json({ ok: true, user, role, message: 'Password verification not implemented - using hardcoded fallback' });
+
+    if (!role) {
+      return res.json({ ok: false, error: 'Role not found for user' });
+    }
+
+    // No password column in mst_user — verify against hardcoded credentials
+    const CREDENTIALS = {
+      admin: 'admin123', kepala_keuangan: 'keuangan123', direktur: 'direktur123',
+      kepala_unit: 'unit123', operator_unit: 'operator123',
+    };
+    const expectedRoleId = user.roleId;
+    const expectedPassword = CREDENTIALS[expectedRoleId];
+    if (!expectedPassword || password !== expectedPassword) {
+      return res.json({ ok: false, error: 'Password salah' });
+    }
+
+    res.json({ ok: true, user, role });
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }

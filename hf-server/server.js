@@ -198,26 +198,29 @@ async function sbUpsert(table, rows) {
   return text ? transformData(JSON.parse(text), 'toCamel') : [];
 }
 
-// ── Auto-migrate: add audit columns to approval table if missing ──
+// ── Auto-migrate: add audit columns to approval table if they exist ──
+// Must complete BEFORE app.listen starts serving requests
 async function autoMigrateApprovalAudit() {
-  // Check which columns already exist by trying to select them
   try {
     await sbFetch('approval', 'GET', null, '?select=approvedby&limit=1');
-    // Column exists — add audit columns back to TABLE_COLUMNS
     TABLE_COLUMNS.approval.push('approvedby','approvedat','rejectedby','rejectedat','alasantolak');
-    console.log('Approval audit columns already exist');
+    console.log('Approval audit columns exist — enabled');
   } catch {
-    // Columns don't exist — DO NOT add to TABLE_COLUMNS
-    // This prevents 500 errors when PostgREST tries to insert into non-existent columns
-    console.log('Approval audit columns missing — run supabase-migration-approval-audit.sql to add them');
+    console.log('Approval audit columns missing — audit fields will be stripped from approval payload');
   }
 }
-autoMigrateApprovalAudit();
 
 // ── Express app ─────────────────────────────────────────────────
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '50mb' }));
+
+// ── Start server (await migration first) ────────────────────────
+autoMigrateApprovalAudit().then(() => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`SIM Remunerasi API + Frontend running on port ${PORT} (Supabase backend)`);
+  });
+});
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -236,8 +239,6 @@ app.post('/api/auth', async (req, res) => {
     const user = users[0];
     const roles = await sbSelect('mst_role', '*', `&id=eq.${user.roleId}&limit=1`);
     const role = roles.length > 0 ? roles[0] : null;
-    // No password verification (mst_user has no password column)
-    // Return user data so frontend can use it
     res.json({ ok: true, user, role, message: 'Password verification not implemented - using hardcoded fallback' });
   } catch (e) {
     res.json({ ok: false, error: e.message });
@@ -558,9 +559,4 @@ app.use(express.static(publicDir, {
 app.get('*', (_req, res) => {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(publicDir, 'index.html'));
-});
-
-// ── Start server ────────────────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`SIM Remunerasi API + Frontend running on port ${PORT} (Supabase backend)`);
 });

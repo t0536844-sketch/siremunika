@@ -12,12 +12,22 @@ export default function NotificationPanel() {
   const {
     notifications,
     unreadCount,
+    addNotification,
     markAsRead,
     markAllAsRead,
     clearNotifications,
     showNotifications,
     setShowNotifications,
+    setActivePage,
   } = useApp();
+
+  const handleNotifClick = (notif: typeof notifications[0]) => {
+    markAsRead(notif.id);
+    if (notif.page) {
+      setShowNotifications(false);
+      setActivePage(notif.page);
+    }
+  };
 
   if (!showNotifications) return null;
 
@@ -84,10 +94,10 @@ export default function NotificationPanel() {
               return (
                 <div
                   key={notif.id}
-                  onClick={() => markAsRead(notif.id)}
+                  onClick={() => handleNotifClick(notif)}
                   className={`px-4 py-3 border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition flex items-start gap-3 ${
                     !notif.read ? 'bg-teal-50/30 dark:bg-teal-900/20' : ''
-                  }`}
+                  }${notif.page ? ' hover:ring-1 hover:ring-teal-300' : ''}`}
                 >
                   <div className={`w-9 h-9 rounded-full ${cfg.bg} flex items-center justify-center flex-shrink-0`}>
                     <Icon className={`w-4 h-4 ${cfg.color}`} />

@@ -2,6 +2,7 @@ import {
   createContext, useContext, useState, useCallback,
   useEffect, type ReactNode,
 } from 'react';
+import dataService from '../data/dataService';
 
 // ─── Types ─────────────────────────────────────────────────────
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -20,6 +21,7 @@ export interface Notification {
   message: string;
   time: string;
   read: boolean;
+  page?: string;  // Navigate to this page when clicked
 }
 
 export interface AppSettings {
@@ -89,13 +91,100 @@ const initialSettings: AppSettings = {
   ...loadStoredSettings(),
 };
 
-// ─── Initial notifications ──────────────────────────────────────
-const initialNotifications: Notification[] = [
-  { id: 'NTF-001', type: 'warning', title: 'Persetujuan Menunggu',   message: '6 pengajuan remunerasi menunggu approval direksi', time: '5 menit lalu', read: false },
-  { id: 'NTF-002', type: 'success', title: 'Periode Ditutup',        message: 'Periode Desember 2025 telah selesai diproses',     time: '1 jam lalu',   read: false },
-  { id: 'NTF-003', type: 'info',    title: 'Update Sistem',          message: 'SIM Remunerasi telah diperbarui ke versi 1.0.0',   time: '3 jam lalu',   read: false },
-  { id: 'NTF-004', type: 'error',   title: 'Data Belum Lengkap',     message: 'Unit Radiologi belum input data pendapatan hari ini', time: 'Kemarin',  read: true  },
-];
+// ─── Generate initial notifications from data ──────────────────
+function buildDataNotifications(data: any): Notification[] {
+  const notifs: Notification[] = [];
+  const now = new Date();
+  const timeAgo = (mins: number) => mins < 60 ? `${mins} menit lalu` : mins < 1440 ? `${Math.floor(mins/60)} jam lalu` : 'Kemarin';
+
+  // Pending approvals
+  const approvalData = data?.approval || [];
+  const pendingApproval = approvalData.filter((a: any) => a.status === 'pending');
+  if (pendingApproval.length > 0) {
+    notifs.push({
+      id: 'NTF-APR-PENDING',
+      type: 'warning',
+      title: 'Persetujuan Menunggu',
+      message: `${pendingApproval.length} pengajuan remunerasi menunggu approval`,
+      time: timeAgo(5),
+      read: false,
+      page: 'approval',
+    });
+  }
+
+  // Hasil kalkulasi draft (not finalized yet)
+  const hasilData = data?.hasilKalkulasi || [];
+  const draftHasil = hasilData.filter((h: any) => h.status === 'draft');
+  if (draftHasil.length > 0) {
+    notifs.push({
+      id: 'NTF-HASIL-DRAFT',
+      type: 'info',
+      title: 'Hasil Kalkulasi Belum Final',
+      message: `${draftHasil.length} unit hasil kalkulasi masih berstatus draft`,
+      time: timeAgo(30),
+      read: false,
+      page: 'hasil',
+    });
+  }
+
+  // Pembayaran awaiting finalization
+  const pembayaranData = data?.pembayaran || [];
+  const draftPembayaran = pembayaranData.filter((p: any) => p.status === 'draft');
+  if (draftPembayaran.length > 0) {
+    notifs.push({
+      id: 'NTF-PMB-DRAFT',
+      type: 'info',
+      title: 'Pembayaran Menunggu Finalisasi',
+      message: `${draftPembayaran.length} pembayaran draft menunggu finalisasi`,
+      time: timeAgo(60),
+      read: false,
+      page: 'pembayaran',
+    });
+  }
+
+  // Approved pembayaran (ready to pay)
+  const approvedPembayaran = pembayaranData.filter((p: any) => p.status === 'approved');
+  if (approvedPembayaran.length > 0) {
+    notifs.push({
+      id: 'NTF-PMB-APPROVED',
+      type: 'success',
+      title: 'Pembayaran Siap Transfer',
+      message: `${approvedPembayaran.length} pembayaran telah disetujui dan siap ditransfer`,
+      time: timeAgo(120),
+      read: false,
+      page: 'pembayaran',
+    });
+  }
+
+  // Rejected approvals
+  const rejectedApproval = approvalData.filter((a: any) => a.status === 'rejected');
+  if (rejectedApproval.length > 0) {
+    notifs.push({
+      id: 'NTF-APR-REJECTED',
+      type: 'error',
+      title: 'Pengajuan Ditolak',
+      message: `${rejectedApproval.length} pengajuan remunerasi telah ditolak`,
+      time: timeAgo(180),
+      read: true,
+      page: 'approval',
+    });
+  }
+
+  // System info (always present)
+  notifs.push({
+    id: 'NTF-SYS-VERSION',
+    type: 'info',
+    title: 'Update Sistem',
+    message: 'SIM Remunerasi versi 1.0 — Kalkulator→Hasil→Approval→Pembayaran pipeline aktif',
+    time: timeAgo(300),
+    read: true,
+  });
+
+  return notifs;
+}
+
+// ─── Initial notifications (empty — loaded from data) ──────────
+const initialNotifications: Notification[] = [];
 
 // ─── Context type ───────────────────────────────────────────────
 interface AppContextType {
@@ -108,6 +197,7 @@ interface AppContextType {
 
   notifications: Notification[];
   unreadCount: number;
+  addNotification: (n: Omit<Notification, 'id' | 'time' | 'read'>) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clearNotifications: () => void;
@@ -198,9 +288,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Notifications ────────────────────────────────────────────
+  const addNotification = useCallback((n: Omit<Notification, 'id' | 'time' | 'read'>) => {
+    const id = `NTF-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newNotif: Notification = { ...n, id, time: 'Baru saja', read: false };
+    setNotifications((prev) => [newNotif, ...prev]);
+  }, []);
+
   const markAsRead      = useCallback((id: string) => setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n)), []);
   const markAllAsRead   = useCallback(() => setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))), []);
   const clearNotifications = useCallback(() => setNotifications([]), []);
+
+  // Load data-driven notifications from Supabase on mount
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const data = await dataService.exportAllData();
+        const dataNotifs = buildDataNotifications(data);
+        setNotifications(dataNotifs);
+      } catch {
+        // Fallback to system-only notification
+        setNotifications([
+          { id: 'NTF-SYS-OFFLINE', type: 'warning', title: 'Mode Offline', message: 'Database tidak terhubung — data menggunakan lokal', time: 'Baru saja', read: false },
+        ]);
+      }
+    };
+    loadNotifications();
+  }, []);
 
   // ── Settings ─────────────────────────────────────────────────
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
@@ -228,7 +341,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider value={{
       toasts, showToast, removeToast,
       globalSearch, setGlobalSearch,
-      notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications,
+      notifications, unreadCount, addNotification, markAsRead, markAllAsRead, clearNotifications,
       settings, updateSettings,
       isDark, toggleTheme, setTheme,
       refreshKey, triggerRefresh,

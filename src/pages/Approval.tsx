@@ -278,8 +278,16 @@ export default function Approval() {
       try {
         if (action === 'approve') {
           await dataService.updateApproval({ id: item.id, status: 'approved', approvedBy: userName, approvedAt: now });
+          // Cascade: update related hasil_kalkulasi status to approved
+          if (item.tipe === 'hasil_kalkulasi' || item.tipe === 'hasil') {
+            try { await dataService.updateHasilKalkulasi({ id: item.referensi, status: 'approved' }); } catch { /* non-critical */ }
+          }
         } else {
           await dataService.updateApproval({ id: item.id, status: 'rejected', rejectedBy: userName, rejectedAt: now, alasanTolak: rejectNote });
+          // Cascade: revert hasil back to draft if rejected
+          if (item.tipe === 'hasil_kalkulasi' || item.tipe === 'hasil') {
+            try { await dataService.updateHasilKalkulasi({ id: item.referensi, status: 'draft' }); } catch { /* non-critical */ }
+          }
         }
       } catch {
         showToast('warning', 'Updated locally only', 'Failed to sync to database');

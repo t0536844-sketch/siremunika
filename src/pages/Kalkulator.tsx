@@ -131,7 +131,7 @@ export default function KalkulatorPage() {
         });
 
         const record = {
-          id: `HSL-${periode}-${unit}`,
+          id: `HSL-${periode.replace(/\s+/g, '-')}-${unit.replace(/\s+/g, '-')}`,
           periode,
           unit,
           totalPendapatan: unitPendapatanVal,

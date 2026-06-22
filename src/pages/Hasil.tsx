@@ -20,7 +20,7 @@ import dataService from '../data/dataService';
 const statusHasil = ['Semua', 'draft', 'final', 'approved'] as const;
 
 export default function Hasil() {
-  const { showToast, setActivePage } = useApp();
+  const { showToast, setActivePage, settings } = useApp();
   const [items, setItems] = useState<HasilKalkulasi[]>([]);
 
   const loadFromSupabase = async () => {
@@ -317,7 +317,7 @@ export default function Hasil() {
                   ));
                   const bonusPrestasi = 0;
                   const totalJasaKotor = jasaMedis + jasaParamedis + jasaPenunjang + bonusPrestasi;
-                  const pajakPPh = Math.round(totalJasaKotor * 0.05);
+                  const pajakPPh = Math.round(totalJasaKotor * (settings.pajakPPh || 5) / 100);
                   const iuranBPJS = 0;
                   const potonganLain = 0;
                   const totalPotongan = pajakPPh + iuranBPJS + potonganLain;

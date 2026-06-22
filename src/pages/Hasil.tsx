@@ -25,8 +25,6 @@ export default function Hasil() {
 
   const loadFromSupabase = async () => {
     try {
-      // Clean up duplicate rows (may 404 on servers that don't have the endpoint)
-      try { await dataService.deleteHasilDuplicates(); } catch { /* ignore */ }
       const data = await dataService.getHasilKalkulasi();
       if (data && data.length > 0) {
         setItems(data);

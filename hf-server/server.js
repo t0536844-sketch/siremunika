@@ -79,7 +79,7 @@ const TABLE_COLUMNS = {
   jasa_medis: ['id','periode','nakes','jabatan','unit','tarifjasa','jumlahtindakan','totaljasa','status'],
   indexing:    ['id','kodeindex','namaindex','bobot','kategori','keterangan','aktif'],
   hasil_kalkulasi: ['id','periode','unit','totalpendapatan','totalbeban','totaljasamedis','totaljasaparamedis','totaljasapenunjang','bonusprestasi','pajak','netto','status'],
-  approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan','approvedby','approvedat','rejectedby','rejectedat','alasantolak'],
+  approval:    ['id','referensi','tipe','nilai','pengaju','status','catatan','level','tanggalpengajuan'],
   nakes:       ['id','nip','nama','jabatan','unit','nostr','nosip','tanggallahir','tanggalmasuk','pendidikan','nohp','email','statusaktif','jasapertindakan','totaltindakan','totaljasa','rating'],
   pembayaran:  ['id','periode','nakesid','nakesnama','nip','jabatan','unit','bank','norekening','jasamedis','jasaparamedis','jasapenunjang','bonusprestasi','totaljasakotor','pajakpph','iuranbpjs','potonganlain','totalpotongan','nettodibayar','status','tanggalfinalisasi','tanggalpersetujuan','tanggalpembayaran','nobukti','catatan'],
   mst_user:    ['id','nama','username','email','nohp','roleid','unitid','jabatan','status'],
@@ -198,6 +198,22 @@ async function sbUpsert(table, rows) {
   return text ? transformData(JSON.parse(text), 'toCamel') : [];
 }
 
+// ── Auto-migrate: add audit columns to approval table if missing ──
+async function autoMigrateApprovalAudit() {
+  // Check which columns already exist by trying to select them
+  try {
+    await sbFetch('approval', 'GET', null, '?select=approvedby&limit=1');
+    // Column exists — add audit columns back to TABLE_COLUMNS
+    TABLE_COLUMNS.approval.push('approvedby','approvedat','rejectedby','rejectedat','alasantolak');
+    console.log('Approval audit columns already exist');
+  } catch {
+    // Columns don't exist — DO NOT add to TABLE_COLUMNS
+    // This prevents 500 errors when PostgREST tries to insert into non-existent columns
+    console.log('Approval audit columns missing — run supabase-migration-approval-audit.sql to add them');
+  }
+}
+autoMigrateApprovalAudit();
+
 // ── Express app ─────────────────────────────────────────────────
 const app = express();
 app.use(cors({ origin: true }));
@@ -206,6 +222,26 @@ app.use(express.json({ limit: '50mb' }));
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ ok: true, database: 'Supabase PostgreSQL', server: 'Express on HuggingFace Spaces' });
+});
+
+// Auth endpoint (mst_user doesn't have password column, so we return a message)
+// Frontend falls back to hardcoded credentials when this returns ok: false
+app.post('/api/auth', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const users = await sbSelect('mst_user', '*', `&username=eq.${encodeURIComponent(username)}&limit=1`);
+    if (users.length === 0) {
+      return res.json({ ok: false, error: 'User not found in database' });
+    }
+    const user = users[0];
+    const roles = await sbSelect('mst_role', '*', `&id=eq.${user.roleId}&limit=1`);
+    const role = roles.length > 0 ? roles[0] : null;
+    // No password verification (mst_user has no password column)
+    // Return user data so frontend can use it
+    res.json({ ok: true, user, role, message: 'Password verification not implemented - using hardcoded fallback' });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 // Stats

@@ -25,20 +25,13 @@ export default function Hasil() {
 
   const loadFromSupabase = async () => {
     try {
+      // Clean up duplicate rows first
+      await dataService.deleteHasilDuplicates();
       const data = await dataService.getHasilKalkulasi();
       if (data && data.length > 0) {
         setItems(data);
       } else {
-        // No Supabase data — sync mock data to Supabase so IDs are consistent
         setItems(dataHasil);
-        try {
-          for (const record of dataHasil) {
-            await dataService.updateHasilKalkulasi(record);
-          }
-          // Re-fetch to get Supabase-assigned IDs
-          const synced = await dataService.getHasilKalkulasi();
-          if (synced && synced.length > 0) setItems(synced);
-        } catch { /* keep mock data locally */ }
       }
     } catch { setItems(dataHasil); }
   };
@@ -380,9 +373,9 @@ export default function Hasil() {
         <button
           onClick={async () => {
             const targets = selectedIds.size > 0 ? selectedItems : filtered;
-            const resetable = targets.filter((i) => i.status === 'final' || i.status === 'approved');
+            const resetable = targets;
             if (resetable.length === 0) {
-              showToast('info', 'Tidak Ada Unit untuk Reset', 'Pilih unit dengan status final/approved.');
+              showToast('info', 'Tidak Ada Unit', 'Pilih unit untuk di-reset.');
               return;
             }
             if (!confirm(`Reset ${resetable.length} unit kembali ke draft?`)) return;

@@ -408,6 +408,28 @@ app.post('/api/hasil-kalkulasi', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+app.delete('/api/hasil-kalkulasi/duplicates', async (_req, res) => {
+  try {
+    const all = await sbSelect('hasil_kalkulasi');
+    const seen = {};
+    const toDelete = [];
+    for (const row of all) {
+      const key = `${row.periode}|${row.unit}`;
+      if (seen[key]) {
+        // Keep the latest, delete older duplicates
+        toDelete.push(seen[key].id);
+        seen[key] = row;
+      } else {
+        seen[key] = row;
+      }
+    }
+    for (const id of toDelete) {
+      await sbDelete('hasil_kalkulasi', id);
+    }
+    res.json({ ok: true, deleted: toDelete.length, kept: Object.keys(seen).length });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.delete('/api/hasil-kalkulasi/:id', async (req, res) => {
   try {
     await sbDelete('hasil_kalkulasi', req.params.id);

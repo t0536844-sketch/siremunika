@@ -304,6 +304,10 @@ export const dataService = {
     return apiFetch(`/api/hasil-kalkulasi/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 
+  async deleteHasilDuplicates(): Promise<any> {
+    return apiFetch('/api/hasil-kalkulasi/duplicates', { method: 'DELETE' });
+  },
+
   // ─── Nakes ────────────────────────────────────────────────────
   async saveNakes(item: any): Promise<any> {
     return apiFetch('/api/nakes', {

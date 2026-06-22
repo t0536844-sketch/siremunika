@@ -18,6 +18,7 @@ import {
   Users,
   FileCheck,
   Zap,
+  Pencil,
 } from 'lucide-react';
 import { dataPembayaran } from '../data/mockData';
 import dataService from '../data/dataService';
@@ -50,6 +51,7 @@ export default function OutputPembayaran() {
   const [selectedPayment, setSelectedPayment] = useState<Pembayaran | null>(null);
   const [showSlip, setShowSlip] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [editItem, setEditItem] = useState<Pembayaran | null>(null);
 
   // Get unique values for filters
   const units = Array.from(new Set(items.map((i) => i.unit)));
@@ -484,6 +486,15 @@ export default function OutputPembayaran() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        {(item.status === 'draft' || item.status === 'final') && (
+                          <button
+                            onClick={() => setEditItem({ ...item })}
+                            className="p-1.5 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg"
+                            title="Edit"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handlePrintSlip(item)}
                           className="p-1.5 text-slate-500 hover:bg-blue-50 hover:text-blue-600 rounded-lg"
@@ -544,6 +555,159 @@ export default function OutputPembayaran() {
           </span>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editItem && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-700 to-indigo-800 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg">Edit Pembayaran</h3>
+                <p className="text-xs text-indigo-100">{editItem.id} · {editItem.nakesNama}</p>
+              </div>
+              <button onClick={() => setEditItem(null)} className="text-white/80 hover:text-white text-2xl">×</button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Bank & Rekening */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Bank</label>
+                  <input
+                    value={editItem.bank || ''}
+                    onChange={(e) => setEditItem({ ...editItem, bank: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">No. Rekening</label>
+                  <input
+                    value={editItem.noRekening || ''}
+                    onChange={(e) => setEditItem({ ...editItem, noRekening: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+              </div>
+              {/* Financial fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Jasa Medis</label>
+                  <input
+                    type="number"
+                    value={editItem.jasaMedis || 0}
+                    onChange={(e) => setEditItem({ ...editItem, jasaMedis: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Jasa Paramedis</label>
+                  <input
+                    type="number"
+                    value={editItem.jasaParamedis || 0}
+                    onChange={(e) => setEditItem({ ...editItem, jasaParamedis: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Jasa Penunjang</label>
+                  <input
+                    type="number"
+                    value={editItem.jasaPenunjang || 0}
+                    onChange={(e) => setEditItem({ ...editItem, jasaPenunjang: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Bonus Prestasi</label>
+                  <input
+                    type="number"
+                    value={editItem.bonusPrestasi || 0}
+                    onChange={(e) => setEditItem({ ...editItem, bonusPrestasi: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+              </div>
+              {/* Potongan */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Pajak PPh</label>
+                  <input
+                    type="number"
+                    value={editItem.pajakPPh || 0}
+                    onChange={(e) => setEditItem({ ...editItem, pajakPPh: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Iuran BPJS</label>
+                  <input
+                    type="number"
+                    value={editItem.iuranBPJS || 0}
+                    onChange={(e) => setEditItem({ ...editItem, iuranBPJS: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Potongan Lain</label>
+                  <input
+                    type="number"
+                    value={editItem.potonganLain || 0}
+                    onChange={(e) => setEditItem({ ...editItem, potonganLain: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Catatan</label>
+                  <input
+                    value={editItem.catatan || ''}
+                    onChange={(e) => setEditItem({ ...editItem, catatan: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+              </div>
+              {/* Auto-computed totals */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-indigo-700">Total Jasa Kotor</span>
+                  <span className="font-bold text-indigo-800">{formatRupiah((editItem.jasaMedis||0)+(editItem.jasaParamedis||0)+(editItem.jasaPenunjang||0)+(editItem.bonusPrestasi||0))}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-indigo-700">Total Potongan</span>
+                  <span className="font-bold text-red-700">{formatRupiah((editItem.pajakPPh||0)+(editItem.iuranBPJS||0)+(editItem.potonganLain||0))}</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold">
+                  <span className="text-indigo-800">Netto Dibayar</span>
+                  <span className="text-green-700">{formatRupiah((editItem.jasaMedis||0)+(editItem.jasaParamedis||0)+(editItem.jasaPenunjang||0)+(editItem.bonusPrestasi||0)-(editItem.pajakPPh||0)-(editItem.iuranBPJS||0)-(editItem.potonganLain||0))}</span>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                onClick={() => setEditItem(null)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
+              >
+                Batal
+              </button>
+              <button
+                onClick={async () => {
+                  const totalJasaKotor = (editItem.jasaMedis||0)+(editItem.jasaParamedis||0)+(editItem.jasaPenunjang||0)+(editItem.bonusPrestasi||0);
+                  const totalPotongan = (editItem.pajakPPh||0)+(editItem.iuranBPJS||0)+(editItem.potonganLain||0);
+                  const nettoDibayar = totalJasaKotor - totalPotongan;
+                  const updated = { ...editItem, totalJasaKotor, totalPotongan, nettoDibayar };
+                  setItems(items.map((i) => i.id === updated.id ? updated : i));
+                  setEditItem(null);
+                  showToast('success', 'Pembayaran Diperbarui', `${updated.id} telah diperbarui`);
+                  try {
+                    await dataService.savePembayaran(updated);
+                  } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
+                }}
+                className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm"
+              >
+                Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detail Modal */}
       {selectedPayment && !showSlip && (

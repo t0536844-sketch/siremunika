@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  RotateCcw,
   Banknote,
   Building2,
   CreditCard,
@@ -175,6 +176,15 @@ export default function OutputPembayaran() {
         loadFromSupabase();
       } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
     }
+  };
+
+  const handleUndoBatal = async (id: string) => {
+    setItems(items.map((i) => (i.id === id ? { ...i, status: 'draft' as const } : i)));
+    showToast('success', 'Pembatalan Dibatalkan', `Pembayaran ${id} dikembalikan ke Draft untuk koreksi`);
+    try {
+      await dataService.savePembayaran({ id, status: STATUS_TO_EN['draft'] });
+      loadFromSupabase();
+    } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
   const handleExportExcel = () => {
@@ -579,13 +589,22 @@ export default function OutputPembayaran() {
                             <Zap className="w-4 h-4" />
                           </button>
                         )}
-                        {(item.status === 'draft' || item.status === 'final') && (
+                        {(item.status === 'draft' || item.status === 'final' || item.status === 'disetujui') && (
                           <button
                             onClick={() => handleBatal(item.id)}
                             className="p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-lg"
                             title="Batalkan"
                           >
                             <XCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {item.status === 'dibatalkan' && (
+                          <button
+                            onClick={() => handleUndoBatal(item.id)}
+                            className="p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-lg"
+                            title="Batalkan Pembatalan (kembali ke Draft)"
+                          >
+                            <RotateCcw className="w-4 h-4" />
                           </button>
                         )}
                       </div>

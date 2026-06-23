@@ -77,14 +77,14 @@ export default function KalkulatorPage() {
   const valid = totalPersentase === 100;
 
   const reset = () => {
-    setPendapatan(4850000000);
-    setBebanOp(settings.bebanOperasional);
-    setJasaMedis(settings.jasaMedis);
-    setJasaParamedis(settings.jasaParamedis);
-    setJasaPenunjang(settings.jasaPenunjang);
-    setBonus(settings.bonusPrestasi);
-    setPajak(settings.pajakPPh);
-    showToast('info', 'Kalkulator direset', 'Persentase dikembalikan ke pengaturan default');
+    setPendapatan(0);
+    setBebanOp(0);
+    setJasaMedis(0);
+    setJasaParamedis(0);
+    setJasaPenunjang(0);
+    setBonus(0);
+    setPajak(0);
+    showToast('info', 'Kalkulator direset', 'Semua nilai dikembalikan ke 0');
   };
 
   const saveAsDefault = () => {

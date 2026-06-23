@@ -32,18 +32,64 @@ const statusConfig = {
   draft: { color: 'bg-gray-100 text-gray-700 border-gray-200', icon: FileText, label: 'Draft' },
   final: { color: 'bg-blue-100 text-blue-700 border-blue-200', icon: FileCheck, label: 'Final' },
   disetujui: { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: Clock, label: 'Disetujui' },
+  approved: { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: Clock, label: 'Disetujui' },
   dibayar: { color: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle2, label: 'Dibayar' },
+  paid: { color: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle2, label: 'Dibayar' },
   dibatalkan: { color: 'bg-red-100 text-red-700 border-red-200', icon: XCircle, label: 'Dibatalkan' },
+  cancelled: { color: 'bg-red-100 text-red-700 border-red-200', icon: XCircle, label: 'Dibatalkan' },
 };
+
+// Map Supabase English status → frontend Indonesian for consistency
+const STATUS_TO_ID = {
+  approved: 'disetujui',
+  paid: 'dibayar',
+  cancelled: 'dibatalkan',
+  draft: 'draft',
+  final: 'final',
+};
+
+// Map frontend Indonesian → Supabase English for saving
+const STATUS_TO_EN = {
+  disetujui: 'approved',
+  dibayar: 'paid',
+  dibatalkan: 'cancelled',
+  draft: 'draft',
+  final: 'final',
+};
+
+type PembayaranStatus = 'draft' | 'final' | 'disetujui' | 'dibayar' | 'dibatalkan';
+function normalizeStatus(status: string): PembayaranStatus {
+  return (STATUS_TO_ID as Record<string, PembayaranStatus>)[status] || status as PembayaranStatus;
+}
 
 export default function OutputPembayaran() {
   const { showToast } = useApp();
   const [items, setItems] = useState<Pembayaran[]>([]);
   useEffect(() => {
-    dataService.getPembayaran().then((data) => {
-      setItems(data && data.length > 0 ? data : dataPembayaran);
-    }).catch(() => { setItems(dataPembayaran); });
+    const load = async () => {
+      try {
+        const data = await dataService.getPembayaran();
+        // Normalize Supabase English status to frontend Indonesian
+        const normalized = (data && data.length > 0 ? data : dataPembayaran).map((p: any) => ({
+          ...p,
+          status: normalizeStatus(p.status || 'draft'),
+        }));
+        setItems(normalized);
+      } catch {
+        setItems(dataPembayaran.map((p) => ({ ...p, status: normalizeStatus(p.status || 'draft') })));
+      }
+    };
+    load();
   }, []);
+
+  const loadFromSupabase = async () => {
+    try {
+      const data = await dataService.getPembayaran();
+      if (data && data.length > 0) {
+        setItems(data.map((p: any) => ({ ...p, status: normalizeStatus(p.status || 'draft') })));
+      }
+    } catch { /* keep current local state */ }
+  };
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [filterUnit, setFilterUnit] = useState('Semua');
@@ -92,9 +138,10 @@ export default function OutputPembayaran() {
   const handleFinalisasi = async (id: string) => {
     const now = new Date().toISOString();
     setItems(items.map((i) => (i.id === id ? { ...i, status: 'final' as const, tanggalFinalisasi: now } : i)));
-    showToast('success', 'Pembayaran Difinalisasi', `Pembayaran ${id} telah difinalisasi dan siap disetujui`);
+    showToast('success', 'Pembayaran Difinalisasi', `Pembayaran ${id} telah difinalisasi dan siak disetujui`);
     try {
-      await dataService.savePembayaran({ id, status: 'final', tanggalFinalisasi: now });
+      await dataService.savePembayaran({ id, status: STATUS_TO_EN['final'], tanggalFinalisasi: now });
+      loadFromSupabase();
     } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
@@ -103,7 +150,8 @@ export default function OutputPembayaran() {
     setItems(items.map((i) => (i.id === id ? { ...i, status: 'disetujui' as const, tanggalPersetujuan: now } : i)));
     showToast('success', 'Pembayaran Disetujui', `Pembayaran ${id} telah disetujui oleh Kepala Keuangan`);
     try {
-      await dataService.savePembayaran({ id, status: 'disetujui', tanggalPersetujuan: now });
+      await dataService.savePembayaran({ id, status: STATUS_TO_EN['disetujui'], tanggalPersetujuan: now });
+      loadFromSupabase();
     } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
@@ -113,7 +161,8 @@ export default function OutputPembayaran() {
     setItems(items.map((i) => (i.id === id ? { ...i, status: 'dibayar' as const, tanggalPembayaran: now, noBukti } : i)));
     showToast('success', 'Pembayaran Berhasil', `Transfer ${noBukti} telah dilakukan`);
     try {
-      await dataService.savePembayaran({ id, status: 'dibayar', tanggalPembayaran: now, noBukti });
+      await dataService.savePembayaran({ id, status: STATUS_TO_EN['dibayar'], tanggalPembayaran: now, noBukti });
+      loadFromSupabase();
     } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
   };
 
@@ -122,7 +171,8 @@ export default function OutputPembayaran() {
       setItems(items.map((i) => (i.id === id ? { ...i, status: 'dibatalkan' as const } : i)));
       showToast('warning', 'Pembayaran Dibatalkan', `Pembayaran ${id} telah dibatalkan`);
       try {
-        await dataService.savePembayaran({ id, status: 'dibatalkan' });
+        await dataService.savePembayaran({ id, status: STATUS_TO_EN['dibatalkan'] });
+        loadFromSupabase();
       } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
     }
   };
@@ -692,12 +742,14 @@ export default function OutputPembayaran() {
                   const totalJasaKotor = (editItem.jasaMedis||0)+(editItem.jasaParamedis||0)+(editItem.jasaPenunjang||0)+(editItem.bonusPrestasi||0);
                   const totalPotongan = (editItem.pajakPPh||0)+(editItem.iuranBPJS||0)+(editItem.potonganLain||0);
                   const nettoDibayar = totalJasaKotor - totalPotongan;
-                  const updated = { ...editItem, totalJasaKotor, totalPotongan, nettoDibayar };
-                  setItems(items.map((i) => i.id === updated.id ? updated : i));
+                  const localUpdate = { ...editItem, totalJasaKotor, totalPotongan, nettoDibayar };
+                  const supabasePayload = { ...localUpdate, status: STATUS_TO_EN[editItem.status] || editItem.status };
+                  setItems(items.map((i) => i.id === localUpdate.id ? localUpdate : i));
                   setEditItem(null);
-                  showToast('success', 'Pembayaran Diperbarui', `${updated.id} telah diperbarui`);
+                  showToast('success', 'Pembayaran Diperbarui', `${localUpdate.id} telah diperbarui`);
                   try {
-                    await dataService.savePembayaran(updated);
+                    await dataService.savePembayaran(supabasePayload);
+                    loadFromSupabase();
                   } catch { showToast('warning', 'Updated locally only', 'Failed to sync to database'); }
                 }}
                 className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm"

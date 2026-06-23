@@ -217,8 +217,12 @@ export default function KalkulatorPage() {
         <div className="text-right">
           <input
             type="number"
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
+            value={value || ''}
+            onChange={(e) => {
+              const v = e.target.value;
+              onChange(v === '' ? 0 : Number(v));
+            }}
+            placeholder="0"
             className="w-16 text-right text-lg font-bold text-slate-800 bg-slate-50 px-1 rounded"
           />
           <span className="text-sm text-slate-500">%</span>
@@ -280,8 +284,12 @@ export default function KalkulatorPage() {
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">Rp</span>
               <input
                 type="number"
-                value={pendapatan}
-                onChange={(e) => setPendapatan(Number(e.target.value))}
+                value={pendapatan || ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPendapatan(v === '' ? 0 : Number(v));
+                }}
+                placeholder="0"
                 className="w-full pl-14 pr-4 py-3 text-lg font-bold text-slate-800 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
             </div>
@@ -296,6 +304,12 @@ export default function KalkulatorPage() {
                 </button>
               ))}
             </div>
+            {unitPendapatan.length > 0 && (
+              <p className="text-xs text-teal-600 mt-2">
+                Data pendapatan aktual: {formatRupiah(unitPendapatan.reduce((s, e) => s + e.totalPendapatan, 0))} dari {unitPendapatan.length} unit
+                {pendapatan !== unitPendapatan.reduce((s, e) => s + e.totalPendapatan, 0) && ' · Nilai manual aktif'}
+              </p>
+            )}
           </div>
 
           {/* Sliders */}
@@ -360,8 +374,12 @@ export default function KalkulatorPage() {
                 <div className="text-right">
                   <input
                     type="number"
-                    value={pajak}
-                    onChange={(e) => setPajak(Number(e.target.value))}
+                    value={pajak || ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPajak(v === '' ? 0 : Number(v));
+                    }}
+                    placeholder="0"
                     className="w-14 text-right text-lg font-bold text-rose-800 bg-white px-1 rounded border border-rose-200"
                   />
                   <span className="text-sm text-rose-600">%</span>

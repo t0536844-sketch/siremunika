@@ -98,17 +98,8 @@ export default function Dashboard() {
     const loadDashboardData = async () => {
       try {
         setIsLoading(true);
-        const [stats, pendapatan, chartData] = await Promise.all([
-          dataService.getDashboardStats(),
-          dataService.getPendapatan(),
-          dataService.getChartTrend()
-        ]);
-        
-        setDashboardData({
-          stats,
-          pendapatan,
-          chartTrend: chartData,
-        });
+        const data = await dataService.exportAllData();
+        setDashboardData(data);
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
         showToast('error', 'Gagal memuat data dashboard');
@@ -116,14 +107,67 @@ export default function Dashboard() {
         setIsLoading(false);
       }
     };
-
     loadDashboardData();
   }, [showToast]);
 
-  // Use mock data as fallback while loading or if API fails
-  const currentStats = dashboardData?.stats || dashboardStats;
-  const currentPendapatan = dashboardData?.pendapatan || dataPendapatan;
-  const currentChartTrend = dashboardData?.chartTrend || chartTrend;
+  // Real data from Supabase (with mock fallback)
+  const allData = dashboardData || {};
+  const pendapatanList = allData.pendapatan || dataPendapatan;
+  const jasaMedisList = allData.jasaMedis || dataJasa;
+  const nakesList = allData.nakes || [];
+  const pembayaranList = allData.pembayaran || [];
+  const approvalList = allData.approval || [];
+  const hasilList = allData.hasilKalkulasi || [];
+
+  // Calculate stats from real data
+  const totalPendapatanBulanIni = pendapatanList.reduce((s: number, p: any) => s + (p.nilaiPendapatan || 0), 0);
+  const totalJasaDibayarkan = jasaMedisList.reduce((s: number, j: any) => s + (j.totalJasa || 0), 0);
+  const jumlahNakesAktif = nakesList.filter((n: any) => n.statusAktif).length;
+  const approvedCount = approvalList.filter((a: any) => a.status === 'approved').length;
+  const totalApprovalCount = approvalList.length;
+  const persentaseApproval = totalApprovalCount > 0 ? Math.round((approvedCount / totalApprovalCount) * 100) : 87;
+
+  // Pembayaran status counts from real data
+  const pembayaranDraft = pembayaranList.filter((p: any) => (p.status || '').toLowerCase() === 'draft').length;
+  const pembayaranFinal = pembayaranList.filter((p: any) => (p.status || '').toLowerCase() === 'final').length;
+  const pembayaranApproved = pembayaranList.filter((p: any) => (p.status || '').toLowerCase() === 'approved' || (p.status || '').toLowerCase() === 'disetujui').length;
+  const pembayaranPaid = pembayaranList.filter((p: any) => (p.status || '').toLowerCase() === 'paid' || (p.status || '').toLowerCase() === 'dibayar').length;
+  const pembayaranCancelled = pembayaranList.filter((p: any) => (p.status || '').toLowerCase() === 'cancelled' || (p.status || '').toLowerCase() === 'dibatalkan').length;
+  const totalPembayaran = pembayaranDraft + pembayaranFinal + pembayaranApproved + pembayaranPaid + pembayaranCancelled;
+  const pembayaranCair = pembayaranList.filter((p: any) => (p.status || '').toLowerCase() === 'paid' || (p.status || '').toLowerCase() === 'dibayar').reduce((s: number, p: any) => s + (p.nettoDibayar || 0), 0);
+
+  // Chart: Top 5 units by pendapatan
+  const unitPendapatanMap: Record<string, number> = {};
+  for (const p of pendapatanList) {
+    const unit = p.unit || '';
+    if (unit) unitPendapatanMap[unit] = (unitPendapatanMap[unit] || 0) + (p.nilaiPendapatan || 0);
+  }
+  const realChartUnit = Object.entries(unitPendapatanMap)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 5)
+    .map(([unit, nilai]) => ({ unit, nilai }));
+
+  // Chart: Komposisi from settings percentages
+  const realChartKomposisi = [
+    { name: 'Beban Operasional', value: settings.bebanOperasional },
+    { name: 'Jasa Medis', value: settings.jasaMedis },
+    { name: 'Jasa Paramedis', value: settings.jasaParamedis },
+    { name: 'Jasa Penunjang', value: settings.jasaPenunjang },
+    { name: 'Bonus Prestasi', value: settings.bonusPrestasi },
+    { name: 'Pajak PPh', value: settings.pajakPPh },
+  ];
+
+  const currentStats = {
+    totalPendapatanBulanIni,
+    totalJasaDibayarkan,
+    jumlahNakesAktif,
+    persentaseApproval,
+    pertumbuhanPendapatan: 12.5,
+    jumlahTransaksi: pendapatanList.length + jasaMedisList.length,
+  };
+
+  const currentPendapatan = pendapatanList;
+  const currentChartTrend = chartTrend; // trend chart still uses mock (no monthly historical data in Supabase yet)
 
   const handleExportSummary = () => {
     const summary = [
@@ -250,7 +294,7 @@ export default function Dashboard() {
           trend="+12.5%"
           trendValue="vs Juli"
           color="bg-teal-100 text-teal-700"
-          subtitle={`${formatNumber(dashboardStats.jumlahTransaksi)} transaksi`}
+          subtitle={`${formatNumber(currentStats.jumlahTransaksi)} transaksi`}
           onClick={() => setActivePage('pendapatan')}
         />
         <StatCard
@@ -285,12 +329,12 @@ export default function Dashboard() {
         />
         <StatCard
           label="Pembayaran Cair"
-          value={formatRupiah(692650000)}
+          value={formatRupiah(pembayaranCair)}
           icon={Activity}
           trend="+15.2%"
           trendValue="On-time"
           color="bg-green-100 text-green-700"
-          subtitle="4 dari 10 nakes dibayar"
+          subtitle={`${pembayaranPaid} dari ${totalPembayaran} nakes dibayar`}
           onClick={() => setActivePage('pembayaran')}
         />
       </div>
@@ -373,7 +417,7 @@ export default function Dashboard() {
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
-                data={chartKomposisi}
+                data={realChartKomposisi}
                 cx="50%"
                 cy="50%"
                 innerRadius={55}
@@ -381,7 +425,7 @@ export default function Dashboard() {
                 dataKey="value"
                 paddingAngle={3}
               >
-                {chartKomposisi.map((_, index) => (
+                {realChartKomposisi.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="#fff" strokeWidth={2} />
                 ))}
               </Pie>
@@ -392,7 +436,7 @@ export default function Dashboard() {
             </PieChart>
           </ResponsiveContainer>
           <div className="grid grid-cols-2 gap-2 mt-2">
-            {chartKomposisi.map((item, idx) => (
+            {realChartKomposisi.map((item, idx) => (
               <div key={item.name} className="flex items-center gap-2 text-xs group hover:bg-slate-50 rounded-lg p-1.5 transition-colors cursor-pointer">
                 <span
                   className="w-2.5 h-2.5 rounded-full flex-shrink-0"
@@ -417,7 +461,7 @@ export default function Dashboard() {
             </div>
           </div>
           <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={chartUnit} layout="vertical" margin={{ top: 5, right: 30, left: 110, bottom: 5 }}>
+            <BarChart data={realChartUnit.length > 0 ? realChartUnit : chartUnit} layout="vertical" margin={{ top: 5, right: 30, left: 110, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={true} vertical={false} />
               <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <YAxis
@@ -507,11 +551,11 @@ export default function Dashboard() {
         </div>
         <div className="grid grid-cols-5 gap-3">
           {[
-            { status: 'Draft', count: 1, color: 'from-slate-400 to-slate-500', bgColor: 'bg-slate-50', textColor: 'text-slate-700', borderColor: 'border-slate-200' },
-            { status: 'Final', count: 2, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
-            { status: 'Disetujui', count: 2, color: 'from-yellow-500 to-yellow-600', bgColor: 'bg-yellow-50', textColor: 'text-yellow-700', borderColor: 'border-yellow-200' },
-            { status: 'Dibayar', count: 4, color: 'from-green-500 to-green-600', bgColor: 'bg-green-50', textColor: 'text-green-700', borderColor: 'border-green-200' },
-            { status: 'Dibatalkan', count: 1, color: 'from-red-500 to-red-600', bgColor: 'bg-red-50', textColor: 'text-red-700', borderColor: 'border-red-200' },
+            { status: 'Draft', count: pembayaranDraft, color: 'from-slate-400 to-slate-500', bgColor: 'bg-slate-50', textColor: 'text-slate-700', borderColor: 'border-slate-200' },
+            { status: 'Final', count: pembayaranFinal, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-50', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
+            { status: 'Disetujui', count: pembayaranApproved, color: 'from-yellow-500 to-yellow-600', bgColor: 'bg-yellow-50', textColor: 'text-yellow-700', borderColor: 'border-yellow-200' },
+            { status: 'Dibayar', count: pembayaranPaid, color: 'from-green-500 to-green-600', bgColor: 'bg-green-50', textColor: 'text-green-700', borderColor: 'border-green-200' },
+            { status: 'Dibatalkan', count: pembayaranCancelled, color: 'from-red-500 to-red-600', bgColor: 'bg-red-50', textColor: 'text-red-700', borderColor: 'border-red-200' },
           ].map((item, idx, arr) => (
             <div key={item.status} className="relative">
               <div className={`${item.bgColor} ${item.borderColor} border rounded-xl p-4 text-center hover:shadow-md transition`}>
@@ -520,7 +564,7 @@ export default function Dashboard() {
                 </div>
                 <p className={`text-xs font-bold ${item.textColor} mb-1`}>{item.status}</p>
                 <div className="w-full bg-slate-200 rounded-full h-1.5 mt-2">
-                  <div className={`bg-gradient-to-r ${item.color} h-1.5 rounded-full`} style={{ width: `${(item.count / 10) * 100}%` }}></div>
+                  <div className={`bg-gradient-to-r ${item.color} h-1.5 rounded-full`} style={{ width: `${totalPembayaran > 0 ? (item.count / totalPembayaran) * 100 : 0}%` }}></div>
                 </div>
               </div>
               {idx < arr.length - 1 && (
@@ -562,11 +606,11 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {dataJasa
+              {jasaMedisList
                 .slice()
-                .sort((a, b) => b.totalJasa - a.totalJasa)
+                .sort((a: any, b: any) => (b.totalJasa || 0) - (a.totalJasa || 0))
                 .slice(0, 5)
-                .map((item, idx) => (
+                .map((item: any, idx: number) => (
                   <tr
                     key={item.id}
                     className="border-t border-slate-100 hover:bg-teal-50/40 transition-colors cursor-pointer"
@@ -587,10 +631,10 @@ export default function Dashboard() {
                         {idx + 1}
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-800">{item.nakes}</td>
-                    <td className="px-6 py-4 text-slate-600 text-xs">{item.jabatan}</td>
-                    <td className="px-6 py-4 text-slate-600 text-xs">{item.unit}</td>
-                    <td className="px-6 py-4 text-right text-slate-600 text-xs">{formatNumber(item.jumlahTindakan)}</td>
+                    <td className="px-6 py-4 font-bold text-slate-800">{item.nakes || item.nakesNama || '-'}</td>
+                    <td className="px-6 py-4 text-slate-600 text-xs">{item.jabatan || '-'}</td>
+                    <td className="px-6 py-4 text-slate-600 text-xs">{item.unit || '-'}</td>
+                    <td className="px-6 py-4 text-right text-slate-600 text-xs">{formatNumber(item.jumlahTindakan || 0)}</td>
                     <td className="px-6 py-4 text-right font-bold text-teal-700">{formatRupiah(item.totalJasa)}</td>
                     <td className="px-6 py-4 text-center">
                       <span

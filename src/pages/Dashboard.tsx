@@ -190,12 +190,12 @@ export default function Dashboard() {
             <div className="flex flex-col items-start lg:items-end bg-white/10 backdrop-blur-sm rounded-2xl p-5 border border-white/10 min-w-[240px]">
               <p className="text-xs text-teal-100 mb-1">Total Pendapatan</p>
               <p className="text-3xl lg:text-4xl font-bold tracking-tight">
-                {formatRupiah(dashboardStats.totalPendapatanBulanIni)}
+                {formatRupiah(currentStats.totalPendapatanBulanIni)}
               </p>
               <div className="flex items-center gap-2 mt-2 text-xs">
                 <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded-full font-semibold">
                   <ArrowUpRight className="w-3 h-3" />
-                  +{dashboardStats.pertumbuhanPendapatan}%
+                  +{currentStats.pertumbuhanPendapatan}%
                 </span>
                 <span className="text-teal-100/70">vs bulan lalu</span>
               </div>
